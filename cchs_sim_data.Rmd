@@ -1,0 +1,137 @@
+---
+title: CCHS Ontario population for microsimulations
+author: Hana Fu
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+
+knitr::opts_chunk(echo = FALSE)
+
+```
+
+
+```{r lib}
+
+library(tidyverse)
+library(kableExtra)
+library(ggplot2)
+
+```
+
+```{r documentations}
+
+# https://www150.statcan.gc.ca/n1/pub/12-002-x/2014001/article/11901-eng.htm
+# http://digrs.blogspot.com/2014/12/cchs-bootstrap-weights.html
+# https://gsg.uottawa.ca/data/teaching/escc-cchs/fmgd_pumf/2015-2016/bootstrap_e.pdf
+# http://www.ciqss.umontreal.ca/Docs/Formations/Ateliers/2003-11-27_UseofData.pdf
+# http://gsg.uottawa.ca/data/eds/Bootvar/AppendixC.pdf (CCHS bootstrap weights don't seem to be mean bootstrap)
+
+
+```
+
+```{r load_data}
+
+dataDir <- 'H:\\Microsimulations\\Data'
+
+load(file.path(dataDir,'cchs2013_14_Ontario.RData'))
+
+```
+
+# Sample and bootstrap weights
+
+Histogram display the sum of each 500 bootstrap weights, with \textcolor{blue}{blue} indicates the sum of sample weights. This is to check whether bootstrap weights already include the sample weights, which seem to be true.
+
+```{r some_checks}
+
+# Some checks on variables
+sum(table(cchs2013_14_Ontario$SAMPLEID) > 1) # should be zero, that is, each sample ID does not appear more than once
+
+# Sum of sample weights
+sampleWgtSum <- sum(cchs2013_14_Ontario$WTS_S)
+
+# Sum of bootstrap weights
+btstrpVars <- grep("BSW[0-5]+", names(cchs2013_14_Ontario), value = TRUE)
+btstrpSum <- colSums(cchs2013_14_Ontario[bootstrapVars])
+btstrpSum <- data.frame(btstrpSum)
+colnames(btstrpSum) <- "value"
+
+# Plot
+ggplot(btstrpSum, aes(x=value)) +
+  geom_histogram(colour="white") +
+  geom_vline(xintercept = sampleWgtSum, 
+                color = "blue", size=1.5)
+
+```
+
+# Create factor variables
+
+```{r cchs_vars, echo=TRUE}
+
+cchs2013_14_Ontario$sex <- factor(cchs2013_14_Ontario$DHH_SEX, labels=c("Male","Female"))
+
+cchs2013_14_Ontario$agecat <- cut(cchs2013_14_Ontario$DHH_AGE, c(12,30,40,50,60,70,80,105), 
+                                  include.lowest = TRUE, right = FALSE)
+
+levels(cchs2013_14_Ontario$agecat) <- c("12-29","30-39","40-49","50-59","60-69","70-79","80+")
+
+```
+
+## Tabulation of counts by age and sex (without survey weights)
+
+```{r crude_tab}
+
+# Crude tabulation
+crudeTab <- cchs2013_14_Ontario %>%
+  group_by(agecat, sex) %>%
+  summarise(count = n()) %>%
+  pivot_wider(names_from = sex, values_from = count, values_fill = 0) %>%
+  mutate(Both = Male + Female)
+
+crudeTotal <- data.frame(agecat="Total", Male = sum(crudeTab[,2]), 
+                         Female = sum(crudeTab[,3]), Both = sum(crudeTab[,4]))
+
+# Print tabulation
+rbind(crudeTab, 
+      crudeTotal) %>%
+  kable(col.names = c("Age group","Male","Female","Both")) %>%
+  kable_styling("striped") %>%
+  row_spec(8, bold = TRUE)
+
+```
+
+# Implement survey design
+
+```{r svy_design}
+
+# See link for instructions https://stackoverflow.com/questions/45642026/survey-weights-and-boostrap-wieghts-to-get-counts-and-cis
+
+library(survey)
+cchsDesign <- svrepdesign(data = cchs2013_14_Ontario,
+                        weights = ~WTS_S,
+                        repweights = "BSW[0-5]+",
+                        type = "bootstrap",
+                        combined.weights = TRUE,
+                        mse = TRUE)
+
+```
+
+## Obtain survey-weighted population size
+
+```{r svy_tab}
+
+# See https://stats.oarc.ucla.edu/r/seminars/survey-data-analysis-with-r/
+# https://www.rdocumentation.org/packages/survey/versions/4.0/topics/svytable
+
+svyTab <- svytable(
+  ~agecat + sex, # variable to pass to function
+  design = cchsDesign # design object
+  )
+
+# 
+
+```
