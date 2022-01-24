@@ -5,17 +5,20 @@ date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   html_document:
     toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
     number_sections: true
 ---
 
-```{r setup, echo=FALSE, include=FALSE}
+```{r setup, include=FALSE}
 
-knitr::opts_chunk(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
 
 ```
 
 
-```{r lib}
+```{r lib, message=FALSE, warning=FALSE}
 
 library(tidyverse)
 library(kableExtra)
@@ -44,19 +47,19 @@ load(file.path(dataDir,'cchs2013_14_Ontario.RData'))
 
 # Sample and bootstrap weights
 
-Histogram display the sum of each 500 bootstrap weights, with \textcolor{blue}{blue} indicates the sum of sample weights. This is to check whether bootstrap weights already include the sample weights, which seem to be true.
+Histogram display the sum of each 500 bootstrap weights, with <span style='color: blue;'><b>blue</b></span> line indicates the sum of sample weights (=`r format(sum(cchs2013_14_Ontario$WTS_S), big.mark= ",", scientific = FALSE)`). This is to check whether bootstrap weights already include the sample weights, which seem to be true.
 
 ```{r some_checks}
 
 # Some checks on variables
-sum(table(cchs2013_14_Ontario$SAMPLEID) > 1) # should be zero, that is, each sample ID does not appear more than once
+#sum(table(cchs2013_14_Ontario$SAMPLEID) > 1) # should be zero, that is, each sample ID does not appear more than once
 
 # Sum of sample weights
 sampleWgtSum <- sum(cchs2013_14_Ontario$WTS_S)
 
 # Sum of bootstrap weights
 btstrpVars <- grep("BSW[0-5]+", names(cchs2013_14_Ontario), value = TRUE)
-btstrpSum <- colSums(cchs2013_14_Ontario[bootstrapVars])
+btstrpSum <- colSums(cchs2013_14_Ontario[btstrpVars])
 btstrpSum <- data.frame(btstrpSum)
 colnames(btstrpSum) <- "value"
 
@@ -68,7 +71,7 @@ ggplot(btstrpSum, aes(x=value)) +
 
 ```
 
-# Create factor variables
+<!-- # Create factor variables -->
 
 ```{r cchs_vars, echo=TRUE}
 
@@ -81,7 +84,7 @@ levels(cchs2013_14_Ontario$agecat) <- c("12-29","30-39","40-49","50-59","60-69",
 
 ```
 
-## Tabulation of counts by age and sex (without survey weights)
+# Tabulation of counts by age and sex (without survey weights)
 
 ```{r crude_tab}
 
@@ -106,7 +109,7 @@ rbind(crudeTab,
 
 # Implement survey design
 
-```{r svy_design}
+```{r svy_design, echo=TRUE, message=FALSE, warning=FALSE}
 
 # See link for instructions https://stackoverflow.com/questions/45642026/survey-weights-and-boostrap-wieghts-to-get-counts-and-cis
 
@@ -122,16 +125,35 @@ cchsDesign <- svrepdesign(data = cchs2013_14_Ontario,
 
 ## Obtain survey-weighted population size
 
-```{r svy_tab}
+```{r svy_tab, echo=TRUE}
 
 # See https://stats.oarc.ucla.edu/r/seminars/survey-data-analysis-with-r/
 # https://www.rdocumentation.org/packages/survey/versions/4.0/topics/svytable
 
-svyTab <- svytable(
+svyTabRes <- svytable(
   ~agecat + sex, # variable to pass to function
   design = cchsDesign # design object
   )
 
-# 
+```
+
+```{r print_svy_tab}
+
+
+# Tabulation
+svyTab <- svyTabRes %>%
+  data.frame %>%
+  pivot_wider(names_from = sex, values_from = Freq, values_fill = 0) %>%
+  mutate(Both = Male + Female)
+
+svyTotal <- data.frame(agecat="Total", Male = sum(svyTab[,2]), 
+                         Female = sum(svyTab[,3]), Both = sum(svyTab[,4]))
+
+# Print tabulation
+rbind(svyTab, 
+      svyTotal) %>%
+  kable(col.names = c("Age group","Male","Female","Both")) %>%
+  kable_styling("striped") %>%
+  row_spec(8, bold = TRUE)
 
 ```
