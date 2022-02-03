@@ -79,31 +79,112 @@ cchs2013_14_Ontario$sex <- factor(cchs2013_14_Ontario$DHH_SEX, labels=c("Male","
 
 cchs2013_14_Ontario$agecat <- cut(cchs2013_14_Ontario$DHH_AGE, c(12,30,40,50,60,70,80,105), 
                                   include.lowest = TRUE, right = FALSE)
-
 levels(cchs2013_14_Ontario$agecat) <- c("12-29","30-39","40-49","50-59","60-69","70-79","80+")
 
+cchs2013_14_Ontario$educat <- factor(cchs2013_14_Ontario$EDUDR04, 
+                                     labels=c("Less than secondary","Secondary school grad", 
+                                     "Some post-secondary", "Post-secondary grad", "NS"),
+                                     levels =c(1,2,3,4,9))
+
+cchs2013_14_Ontario$incpercat <- with(cchs2013_14_Ontario,
+                                      ifelse(INCDPER < 10 | INCDPER %in% c(96,99), INCDPER,
+                                             ifelse(INCDPER %in% c(10,11), 10,
+                                                    ifelse(INCDPER %in% c(12,13), 11, 
+                                                           ifelse(INCDPER == 14, 12, NA)))))
+cchs2013_14_Ontario$incpercat <- factor(cchs2013_14_Ontario$incpercat,
+                                        labels = c("No income", "LESS THAN $5,000", "$5,000 TO $9,999", "$10,000 TO $14,999", "$15,000 TO $19,999", "$20,000 TO $29,999", "$30,000 TO $39,999", "$40,000 TO $49,999", "$50,000 TO $59,999", "$60,000 TO $79,999","$80,000 TO 99,999","$100k or more","NS"),
+                                        levels =c(1:12,99))
+
+cchs2013_14_Ontario$inchhcat <- with(cchs2013_14_Ontario,
+                                      ifelse(INCDHH < 10 | INCDHH %in% c(96,99), INCDHH,
+                                             ifelse(INCDHH %in% c(10,11), 10,
+                                                    ifelse(INCDHH %in% c(12,13), 11, 
+                                                           ifelse(INCDHH %in% c(14,15), 12, NA)))))
+cchs2013_14_Ontario$inchhcat <- factor(cchs2013_14_Ontario$inchhcat,
+                                        labels = c("No income", "LESS THAN $5,000", "$5,000 TO $9,999", "$10,000 TO $14,999", "$15,000 TO $19,999", "$20,000 TO $29,999", "$30,000 TO $39,999", "$40,000 TO $49,999", "$50,000 TO $59,999", "$60,000 TO $79,999","$80,000 TO 99,999","$100k or more","NS"),
+                                        levels =c(1:12,99))
+
+cchs2013_14_Ontario$ethncat <- factor(cchs2013_14_Ontario$SDCDCGT,
+                                      labels = c('White','Black','Korean','Filipino','Japanese','Chinese','South Asian','South East Asian','Arab','West Asian','Latin American','Other Racial or Cultural Origin','Multiple Racial/Cultural Origins','NA','NS'),
+                                      levels = c(1:13,96,99))
+
+cchs2013_14_Ontario$maritalcat <- factor(cchs2013_14_Ontario$DHH_MS,
+  labels = c('Married','Common-Law','Widowed','Separated','Divorced','Single/Never Married','DK','Refusal','NS'),
+  levels = c(1:6,97,98,99))
+
+cchs2013_14_Ontario$geourcat <- factor(cchs2013_14_Ontario$GEODUR2,
+       labels=c("Population Centre", "Rural"),
+       levels=c(1,2))
+
+cchs2013_14_Ontario$alcfreqcat <- factor(cchs2013_14_Ontario$ALC_2,
+                                         labels = c('less than once a month','once a month','2 to 3 times a month','once a week','2 to 3 times a week','4 to 6 times a week','every day','NA','DK','Refusal','NS'),
+                                         levels = c(1:7,96:99))
+
+cchs2013_14_Ontario$alctypecat <- factor(cchs2013_14_Ontario$ALCDTTM,
+                                         labels = c("Regular drinker","Occasional drinker","Did not drink in the last 12 months","NS"),
+                                         levels = c(1,2,3,9))
+
+cchs2013_14_Ontario$alchvycat <- with(cchs2013_14_Ontario,
+                                      ifelse(ALC_3 %in% 1:2, 2, # 1 is heavy drinking
+                                        ifelse(ALC_3 %in% 3:6, 1, # 2 did not have heaving drinking
+                                               ifelse(ALC_3 %in% 96:99, ALC_3, NA))))
+
+cchs2013_14_Ontario$alchvycat <- factor(cchs2013_14_Ontario$alchvycat,
+                                        labels = c("Heavy drinking in the past year at least once per month","Did not heavy drink in the past year","NA","DK","Refusal","NS"),
+                                        levels = c(1:2,96:99))
+
 ```
+
 
 # Tabulation of counts by age and sex (without survey weights)
 
 ```{r crude_tab}
-
 # Crude tabulation
 crudeTab <- cchs2013_14_Ontario %>%
   group_by(agecat, sex) %>%
   summarise(count = n()) %>%
   pivot_wider(names_from = sex, values_from = count, values_fill = 0) %>%
   mutate(Both = Male + Female)
-
 crudeTotal <- data.frame(agecat="Total", Male = sum(crudeTab[,2]), 
                          Female = sum(crudeTab[,3]), Both = sum(crudeTab[,4]))
-
 # Print tabulation
 rbind(crudeTab, 
       crudeTotal) %>%
   kable(col.names = c("Age group","Male","Female","Both")) %>%
   kable_styling("striped") %>%
   row_spec(8, bold = TRUE)
+```
+
+# Tabulation of counts by socioeconomic (without survey weights)
+
+```{r crude_ses_tab, cache=TRUE}
+
+# Crude socioeconomic tabulation
+crudeSesTab <- cchs2013_14_Ontario %>%
+  group_by(agecat, sex, educat, incpercat, inchhcat, ethncat, maritalcat, geourcat) %>%
+  summarise(count = n()) 
+
+# Print tabulation
+DT::datatable(crudeSesTab, colnames=c("Age group","Sex","Education","Income (personal)","Income (household)",
+                      "Ethnicity","Marital Status","Urban/Rural", "Count"),
+              filter = 'top',
+              options = list(pageLength = 20))
+
+```
+
+# Tabulation of counts by alcohol drinking status (without survey weights)
+
+```{r crude_alc_tab}
+
+# Crude alcohol tabulation
+crudeAlcTab <- cchs2013_14_Ontario %>%
+  group_by(alcfreqcat, alctypecat, alchvycat) %>%
+  summarise(count = n()) 
+
+# Print tabulation
+DT::datatable(crudeAlcTab, colnames=c("Frequency of drinking alcohol", "Type of drinker","Heavy drinking", "Count"),
+              filter = 'top',
+              options = list(pageLength = 20))
 
 ```
 
@@ -125,10 +206,9 @@ cchsDesign <- svrepdesign(data = cchs2013_14_Ontario,
 
 ## Obtain survey-weighted population size
 
-```{r svy_tab, echo=TRUE}
+### Age and sex
 
-# See https://stats.oarc.ucla.edu/r/seminars/survey-data-analysis-with-r/
-# https://www.rdocumentation.org/packages/survey/versions/4.0/topics/svytable
+```{r svy_tab, echo=TRUE}
 
 svyTabRes <- svytable(
   ~agecat + sex, # variable to pass to function
@@ -138,7 +218,6 @@ svyTabRes <- svytable(
 ```
 
 ```{r print_svy_tab}
-
 
 # Tabulation
 svyTab <- svyTabRes %>%
@@ -155,5 +234,46 @@ rbind(svyTab,
   kable(col.names = c("Age group","Male","Female","Both")) %>%
   kable_styling("striped") %>%
   row_spec(8, bold = TRUE)
+
+```
+
+### Socioeconomic and alcohol drinking status
+
+Here, eight variables are included to generate survey-weighted counts. The eight variables are age, sex, education, household income, ethnicity, marital status, urban/rural setting, and heavy drinking.
+
+```{r svy_ses_tab, echo=TRUE}
+
+svySesAlcTabRes <- svytable(
+  ~agecat + sex + educat + inchhcat + ethncat + maritalcat + geourcat + alchvycat, # variable to pass to function
+  design = cchsDesign # design object
+  )
+
+```
+
+The codes above creates a 8 dimension output in the "svySesAlcTabRes" object. Many of the "slices" contains zeros, here are a couple of examples:
+
+> svySesAlcTabRes[,,"Secondary school grad","LESS THAN $5,000","Black","Married","Population Centre","Heavy drinking in the past year at least once per month"]
+
+```{r zero_slice_1}
+
+svySesAlcTabRes[,,"Secondary school grad","LESS THAN $5,000","Black","Married","Population Centre","Heavy drinking in the past year at least once per month"]
+       
+```
+
+> svySesAlcTabRes[,,"Less than secondary","No income","White","Single/Never Married","Rural","Did not heavy drink in the past year"]
+
+```{r zero_slice_2}
+
+svySesAlcTabRes[,,"Less than secondary","No income","White","Single/Never Married","Rural","Did not heavy drink in the past year"]
+
+```
+
+There are also "slices" that are non-zero:
+
+> svySesAlcTabRes[,,"Post-secondary grad","$80,000 TO 99,999","White","Married","Population Centre","Heavy drinking in the past year at least once per month"]
+
+```{r non_zero_slice}
+
+svySesAlcTabRes[,,"Post-secondary grad","$80,000 TO 99,999","White","Married","Population Centre","Heavy drinking in the past year at least once per month"]
 
 ```
