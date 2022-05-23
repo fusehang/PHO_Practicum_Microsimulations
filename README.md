@@ -23,20 +23,11 @@ More details on this basic microsimulation structures can be found in the PowerP
 
 | Folder | Description | 
 |------|-------|
-| [Analysis](Analysis) | Contains R scripts for loading Canadian Community Health Survey (CCHS), organizing data for performing microsimulations, and performing the analysis | 
-| [Microsim_functions]Microsim_functions | This folder contains functions in R scripts for performing microsimulations in R. The codes are based on the tutorial paper by Krijkamp EM et al. 2018 [https://doi.org/10.1177/0272989X18754513](https://doi.org/10.1177/0272989X18754513) and their R codes can be found in [https://github.com/DARTH-git/Microsimulation-tutorial](https://github.com/DARTH-git/Microsimulation-tutorial)  | 
-| [Summaries](Summaries) | Wilson.Suraweera@unityhealth.to | 
-| [Presentations](Presentations) | rajeevk@kentropy.com | 
-| [openMpp](openMpp) | prabhat.jha@utoronto.ca | 
-
-## Analysis folder
-
-* [sim_functions.R](sim_functions.R)
-* [sim_functions_2state.R](sim_functions_2state.R)
-* [sim_functions_3state.R](sim_functions_3state.R)
-* [microsimulation_v1.R](microsimulation_v1.R)
-* [microsimulation_v2.R](microsimulation_v2.R)
-
+| [Analysis](Analysis) | Contains R scripts for loading Canadian Community Health Survey (CCHS), organizing data for performing microsimulations, and performing the analysis. | 
+| [Microsim_functions](Microsim_functions) | This folder contains functions in R scripts for performing microsimulations in R. The codes are based on the tutorial paper by Krijkamp EM et al. 2018 [https://doi.org/10.1177/0272989X18754513](https://doi.org/10.1177/0272989X18754513) and their R codes can be found in [https://github.com/DARTH-git/Microsimulation-tutorial](https://github.com/DARTH-git/Microsimulation-tutorial).  | 
+| [Summaries](Summaries) | With R scripts for creating summary reports. | 
+| [Presentations](Presentations) | Contains PowerPoint presentations for presentation in class and to PHO team. | 
+| [openMpp](openMpp) | Contains R scripts for setting up analysis using openM++. openM++ is an open source microsimulation platform, based on the Modgen software ([https://www.statcan.gc.ca/en/microsimulation/modgen/modgen](https://www.statcan.gc.ca/en/microsimulation/modgen/modgen)). See [https://github.com/openmpp/R](https://github.com/openmpp/R) for more detail.| 
 
 ## References
 
