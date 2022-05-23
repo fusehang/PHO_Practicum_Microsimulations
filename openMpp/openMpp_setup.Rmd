@@ -1,0 +1,72 @@
+---
+title: openM++ guide
+author: Hana Fu
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    number_sections: true
+---
+  
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+```{r download_install}
+
+# Download openMpp R package, see https://github.com/openmpp/r/releases/
+thepage = readLines('https://github.com/openmpp/r/releases/')
+idx <- min(grep("tar.gz", thepage))
+linkline <- thepage[idx]
+startpos <- gregexpr("openmpp", linkline)[[1]]
+endpos <- gregexpr("gz", linkline)[[1]]+1
+linkpath <- paste0('https://github.com/',substring(linkline,startpos,endpos))
+
+filepath <- file.path('C:\\Users\\fuseh\\Downloads',basename(linkpath))
+download.file(linkpath, filepath)
+
+# Install package
+install.packages(linkpath, repos = NULL, type = "source")
+
+# Download latest openM++ release, see https://github.com/openmpp/main/releases/
+thepage2 = readLines('https://github.com/openmpp/main/releases/')
+idx2 <- min(grep("openmpp_win", thepage2))
+linkline2 <- thepage2[idx2]
+startpos2 <- gregexpr("https", linkline2)[[1]]
+endpos2 <- gregexpr("zip", linkline2)[[1]]+2
+linkpath2 <- substring(linkline2,startpos2,endpos2)
+if (!file.exists('C:\\openmpp')) {
+  dir.create('C:\\openmpp')
+}
+
+filepath2 <- file.path('C:\\openmpp',basename(linkpath2))
+filebasename2 <- basename(filepath2)
+folderbasename2 <- gsub('.zip','',filebasename2)
+
+if(!file.exists(filepath2)){
+  download.file(linkpath2, filepath2)
+  unzip(filepath2, exdir=file.path('C:\\openmpp',folderbasename2))
+}
+
+```
+
+
+<!-- https://github.com/openmpp/openmpp.github.io/wiki/Run-Model-from-R -->
+
+```{r}
+
+# Set working directory
+setwd(file.path("C:/openmpp",folderbasename2,"models/bin"))
+knitr::opts_chunk$set(root.dir = file.path('C:/openmpp',folderbasename2,"models/bin"))
+
+# use openMpp library for openM++ database access
+library(DBI)
+library("openMpp")
+library("RSQLite")
+
+```

@@ -1,0 +1,476 @@
+---
+title: "Preliminary microsimulation analysis for alcohol policy and harms"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  word_document:
+    toc: yes
+bibliography: msm.bib
+always_allow_html: yes
+---
+  
+```{r setup, include=FALSE}
+
+# Set memory limit
+memory.limit(size=30000)
+
+# Set knitr
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+
+```{r lib, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(ggplot2)
+library(knitr)
+library(officer)
+
+```
+
+```{r load_data}
+
+dataDir <- 'D:\\Microsimulations\\Data'
+
+load(file.path(dataDir,'cchs2013_14_Ontario.RData'))
+
+saveRDS(cchs2013_14_Ontario[1:200,], file.path(dataDir,'cchs2013_14_Ontario2.rds'))
+
+```
+
+```{r cchs_vars}
+
+cchs2013_14_Ontario$sex <- factor(cchs2013_14_Ontario$DHH_SEX, labels=c("Male","Female"))
+
+cchs2013_14_Ontario$agecat <- cut(cchs2013_14_Ontario$DHH_AGE, c(12,30,40,50,60,70,80,105), 
+                                  include.lowest = TRUE, right = FALSE)
+levels(cchs2013_14_Ontario$agecat) <- c("12-29","30-39","40-49","50-59","60-69","70-79","80+")
+
+cchs2013_14_Ontario$educat <- factor(cchs2013_14_Ontario$EDUDR04, 
+                                     labels=c("Less than secondary","Secondary school grad", 
+                                     "Some post-secondary", "Post-secondary grad", "NS"),
+                                     levels =c(1,2,3,4,9))
+
+cchs2013_14_Ontario$incpercat <- with(cchs2013_14_Ontario,
+                                      ifelse(INCDPER < 10 | INCDPER %in% c(96,99), INCDPER,
+                                             ifelse(INCDPER %in% c(10,11), 10,
+                                                    ifelse(INCDPER %in% c(12,13), 11, 
+                                                           ifelse(INCDPER == 14, 12, NA)))))
+
+cchs2013_14_Ontario$incpercat <- factor(cchs2013_14_Ontario$incpercat,
+                                        labels = c("No income", "LESS THAN $5,000", "$5,000 TO $9,999", "$10,000 TO $14,999", "$15,000 TO $19,999", "$20,000 TO $29,999", "$30,000 TO $39,999", "$40,000 TO $49,999", "$50,000 TO $59,999", "$60,000 TO $79,999","$80,000 TO 99,999","$100k or more","NS"),
+                                        levels =c(1:12,99))
+
+cchs2013_14_Ontario$inchhcat <- with(cchs2013_14_Ontario,
+                                      ifelse(INCDHH < 10 | INCDHH %in% c(96,99), INCDHH,
+                                             ifelse(INCDHH %in% c(10,11), 10,
+                                                    ifelse(INCDHH %in% c(12,13), 11, 
+                                                           ifelse(INCDHH %in% c(14,15), 12, NA)))))
+cchs2013_14_Ontario$inchhcat <- factor(cchs2013_14_Ontario$inchhcat,
+                                        labels = c("No income", "LESS THAN $5,000", "$5,000 TO $9,999", "$10,000 TO $14,999", "$15,000 TO $19,999", "$20,000 TO $29,999", "$30,000 TO $39,999", "$40,000 TO $49,999", "$50,000 TO $59,999", "$60,000 TO $79,999","$80,000 TO 99,999","$100k or more","NS"),
+                                        levels =c(1:12,99))
+
+cchs2013_14_Ontario$ethncat <- factor(cchs2013_14_Ontario$SDCDCGT,
+                                      labels = c('White','Black','Korean','Filipino','Japanese','Chinese','South Asian','South East Asian','Arab','West Asian','Latin American','Other Racial or Cultural Origin','Multiple Racial/Cultural Origins','NA','NS'),
+                                      levels = c(1:13,96,99))
+
+cchs2013_14_Ontario$maritalcat <- factor(cchs2013_14_Ontario$DHH_MS,
+  labels = c('Married','Common-Law','Widowed','Separated','Divorced','Single/Never Married','DK','Refusal','NS'),
+  levels = c(1:6,97,98,99))
+
+cchs2013_14_Ontario$geourcat <- factor(cchs2013_14_Ontario$GEODUR2,
+       labels=c("Population Centre", "Rural"),
+       levels=c(1,2))
+
+cchs2013_14_Ontario$alcfreqcat <- factor(cchs2013_14_Ontario$ALC_2,
+                                         labels = c('less than once a month','once a month','2 to 3 times a month','once a week','2 to 3 times a week','4 to 6 times a week','every day','NA','DK','Refusal','NS'),
+                                         levels = c(1:7,96:99))
+
+cchs2013_14_Ontario$alctypecat <- factor(cchs2013_14_Ontario$ALCDTTM,
+                                         labels = c("Regular drinker","Occasional drinker","Did not drink in the last 12 months","NS"),
+                                         levels = c(1,2,3,9))
+
+cchs2013_14_Ontario$alchvycat <- with(cchs2013_14_Ontario,
+                                      ifelse(ALC_3 %in% 1:2, 2, # 1 is heavy drinking
+                                        ifelse(ALC_3 %in% 3:6, 1, # 2 did not have heaving drinking
+                                               ifelse(ALC_3 %in% 96:99, ALC_3, NA))))
+
+cchs2013_14_Ontario$alchvycat <- factor(cchs2013_14_Ontario$alchvycat,
+                                        labels = c("Heavy drinking in the past year at least once per month","Did not heavy drink in the past year","NA","DK","Refusal","NS"),
+                                        levels = c(1:2,96:99))
+
+cchs2013_14_Ontario$wgt_rd <- round(cchs2013_14_Ontario$WTS_S) # rounding the survey weight
+
+```
+
+# Introduction
+
+This analysis applies discrete-event microsimulation to understand the impact of alcohol policies on the Ontario population. The interest is to understand how alcohol policy impact differ by age, sex, and socioeconomic groups. Currently, we are at the initial stage of building the microsimulation model structure. The results presented here are preliminary in that they predict alcohol-related mortality without policy effect and only consider differences in age and sex, but not socioeconomic levels. 
+
+# Methods
+
+## Transition probabilites
+
+We obtained alcohol-attributable and non-attributable mortality rates from the Sheffield Alcohol Policy Model [@holmes2016mortality]. These mortality rates are stratified by age group and sex (Table 1). We consider The mortality rates as transition probabilities since their denominators are they underlying population, but not time-to-event. If their denominators are time-to-event, we will need to apply formulas to convert them to transition probabilities. While morbidity rates are also available from the Sheffield Model, we choose to focus on the two-state model at this stage, as we are unavailable to locate many studies with data on the sick-to-death rates or rate ratio of death when sick versus healthy. 
+
+```{r trans_prob, results='asis', message=FALSE, warning=FALSE}
+
+transProb <- readxl::read_xlsx(path = file.path(dataDir, 'transition-prob-alc-micro-Hana.xlsx'),
+                  sheet = 2, skip = 1)
+
+transProb$sex <- gsub("M","Male",
+                       gsub("F","Female", transProb$sex))
+
+transProb$agecat <- factor(transProb$age)
+transProb$percent_alcohol_attributable <- transProb$percent_alcohol_attributable/100
+
+
+library(flextable)
+
+ft <- flextable(transProb[c('age','sex','transition_4_rate_100k','transition_3_rate_100k')]) %>%
+  set_caption("Ontario population and mortality rates from Sheffield model (or transition probabilites) by age group and sex",
+              style = "Table Caption", 
+              autonum = run_autonum(seq_id = "tab", bkm = "trans_prob")) %>% 
+  set_header_labels(age = "Age group",
+  sex = "Sex", transition_4_rate_100k = "Alcoholic death rates (per 100K)",
+  transition_3_rate_100k = "Non-alcoholic death rates (per 100K)") %>%
+  style(pr_t = fp_text(bold = TRUE), part = "header") %>%
+  fontsize(size = 9) %>%
+  hline(i = 1:10) %>%
+  width(width = 1.5) %>% 
+  add_footer_lines(values = "") 
+flextable_to_rmd(ft)
+
+# transProb[c('age','sex','transition_4_rate_100k','transition_3_rate_100k')] %>%
+#   kable(row.names = FALSE, col.names = c('Age','Sex','Alcoholic death rates (per 100K)','Non-alcoholic death rates (per 100K)'))
+
+```
+
+## Two-state with two paths (alcoholic/non-alcoholic)
+
+We consider both the alcoholic-attributable and non-alcoholic-attributable mortality rates in Table 1 in the microsimulation models. The method to combine them are illustrated in Figure 1. For each individual, Monte-Carlo simulations are performed in parallel based on the alcohol- and non-alcoholic-attributable mortality rates. For both the alcoholic and non-alcoholic paths, the individual either stay in the _healthy_ state or move to the _death_ state in the next time cycle. If either of the paths proceed to the _death_ state, then the individual is considered to be deceased the next and all future time cycles. Only when the individual stay in the _healthy_ state for both paths, the individual will remain in the _healthy_ state for the next time cycle. We keep track of whether a person die due to either alcoholic or non-alcoholic, or both alcoholic and non-alcoholic causes, from these information we can calculate the percent of alcoholic- or non-alcoholic attributable deaths for the population group. 
+
+```{r twostate_flowchart, fig.height= 3, fig.width=10, fig.cap="Figure 1. Schematic diagram of microsimulation at each time cycle"}
+
+library(DiagrammeR)
+par(mar = c(0,0,0,0))
+grViz("digraph flowchart {
+      # node definitions with substituted label text
+      graph [layout = dot, rankdir = LR]
+      node [fontname = Helvetica, shape = rectangle, style=filled]        
+      tab1 [label = 'Alcoholic attributable \n mortality rate', color = orange]
+      tab2 [label = 'Non-alcoholic attributable \n mortality rate', color = hotpink]
+      tab3 [label = 'Monte Carlo \n simulation', shape = diamond, color = orange]
+      tab4 [label = 'Monte Carlo \n simulation', shape = diamond, color = hotpink]
+      tab5 [label = 'Combine Mone Carlo Results \n (when either alcoholic\n or non-alcoholic paths proceed to \n death state, then the individual \n is considered as deceased, \n else, the person stay in \n the healthy state)', shape = diamond, color = limegreen]
+      tab6 [label = 'Death', color = grey]
+      tab7 [label = 'Healthy', color = khaki1]
+
+      # edge definitions with the node IDs
+      tab1 -> tab3;
+      tab2 -> tab4;
+      tab3 -> tab5;
+      tab4 -> tab5;
+      tab5 -> tab6;
+      tab5 -> tab7;
+      }
+      ")
+
+```
+
+## On Monte Carlo process
+
+Since microsimulation models rely on Monte Carlo simulation methods to describe the stochastic transition process of individuals through the model, given the same transition probabilities, individuals will have different results in terms of proceeding to the "death" state [@krijkamp2018microsimulation]. We carried out the microsimulation based on sample R codes from the tutorial paper by @krijkamp2018microsimulation. The stochastic transition process involves using random numbers generated from a uniform(0,1) distribution.
+
+The algorithm proceed for each individual as follows:
+
+1. Generate a random number $u1$ from a uniform(0,1) distribution for the alcoholic path
+2. Generate a random number $u2$ from a uniform(0,1) distribution for the non-alcoholic path
+3. If $u1$ is greater than $1 - \text{alcoholic death rate}$ (or probability of staying in the healthy state), then the person would have died from alcoholic cause
+4. If $u2$ is greater than $1 - \text{non-alcoholic death rate}$ (or probability of staying in the healthy state), then the person would have died from non-alcoholic cause 
+5. If the person either died from alcoholic or non-alcoholic cause, then the person is deceased in the next and all future time cycles; else, the person stays in the healthy state in the next time cycle and repeat #1-5 again.
+
+## Rounding of survey weights
+
+We apply the above methods to the Ontario population. We use the Canadian Community Health Survey (CCHS) data to obtain population by age and sex groups. The CCHS data provide survey weights for each survey individual (Table 2), we simply sum the rounded survey weights by age and sex group to obtain the age- and sex-specific Ontario population (Table 3). Alternatively, we can sum the survey weights first (without rounding) by age and sex group then round this total value. However, with this approach we are not able to link the microsimulation results back to the CCHS individuals. Therefore to choose to round the survey weights at the individual-level. In Table 3, we compare the sum of survey weights versus the sum of rounded survey weights for a list of variables of interest, the two values are the same to the 4th decimal place.
+
+```{r rounding, results='asis'}
+
+ft_cchs_rd <- cchs2013_14_Ontario[1:15,c('agecat','sex','WTS_S','wgt_rd')] %>%
+  arrange(agecat, sex) %>%
+  flextable() %>%
+  set_caption("A snapshot of CCHS data with age, sex, survey weights, and rounded weights") %>% 
+  set_header_labels(agecat = "Age",
+  sex = "Sex", WTS_S = "Survey weights",
+  wgt_rd = "Rounded survey weights") %>%
+  style(pr_t = fp_text(bold = TRUE), part = "header") %>%
+  fontsize(size = 9) %>%
+  hline(i = 1:14) %>%
+  width(width = 1.5) 
+flextable_to_rmd(ft_cchs_rd)
+
+```
+
+```{r svy_design, message=FALSE, warning=FALSE}
+
+# See link for instructions https://stackoverflow.com/questions/45642026/survey-weights-and-boostrap-wieghts-to-get-counts-and-cis
+
+library(survey)
+cchsDesign <- svrepdesign(data = cchs2013_14_Ontario,
+                        weights = ~WTS_S,
+                        repweights = "BSW[0-5]+",
+                        type = "bootstrap",
+                        combined.weights = TRUE,
+                        mse = TRUE)
+
+```
+
+```{r baseline_comparison, fig.width=8, fig.height=7}
+
+# Compare CCHS survey weighted proportion against simulation rounded proprotions
+
+vars <- c('agecat', 'sex', 'educat', 'incpercat', 'inchhcat', 'ethncat', 'maritalcat', 'geourcat','alcfreqcat','alctypecat','alchvycat')
+varnames <- c('Age','Sex','Education','Personal income','Household income','Ethnicity','Marital status','Geography','Alcohol drinking frequency','Type of alcohol drinker','Heavy drinking')
+
+varPropList <- list()
+
+for (v in vars) {
+  cchsProp <- prop.table(
+      svytable(~get(v),
+               design = cchsDesign)) %>%
+      data.frame
+  names(cchsProp) <- c('cat','cchs_prop')
+
+  simProp <- cchs2013_14_Ontario[,c(v,'WTS_S')] %>%
+      mutate(wgt_rd = round(WTS_S)) %>%
+      group_by(get(v)) %>%
+      summarise(wgt_rd = sum(wgt_rd)) %>%
+      mutate(tot_wgt = sum(wgt_rd),
+             prop_wgt = wgt_rd/tot_wgt)
+  names(simProp)[1] <- 'cat'
+  
+  cchsSimProp <- merge(cchsProp, simProp)
+  cchsSimProp$var <- v
+  cchsSimProp$vname <- varnames[match(v,vars)]
+  
+  varPropList[[v]] <- cchsSimProp %>%
+    arrange(cat)
+}
+
+varProp <- do.call(rbind, varPropList)
+varProp$var <- factor(varProp$var, levels=vars)
+
+varProp <- varProp %>% 
+  arrange(var)
+
+```
+
+```{r comparison_table, results='asis'}
+
+select_rows <- grep('age|sex|^alc', row.names(varProp))
+
+# Print table
+ft_cchs_prop <- varProp[select_rows, ] %>%
+  arrange(var, cat) %>%
+  select(vname,cat,cchs_prop,prop_wgt) %>%
+  flextable()%>%
+  set_caption("CCHS data by age, sex, alcohol-related variables with proportion based on survey weights, and rounded weights",
+              style = "Table Caption", 
+              autonum = run_autonum(seq_id = "tab", bkm = "cchs_props")) %>% 
+  set_header_labels(vname = "Variable",
+  cat = "Category", cchs_prop = "CCHS weighted proportion",
+  prop_wgt = "Rounded proportions for microsim.") %>%
+  style(pr_t = fp_text(bold = TRUE), part = "header") %>%
+  fontsize(size = 9) %>%
+  hline(i = 1:29) %>%
+  width(width = 1.5)
+flextable_to_rmd(ft_cchs_prop)
+
+
+```
+
+
+# Results
+
+##	Microsimulation results
+
+We performed microsimulation for 31 time cycles. In the initial time cycle, all individuals begin in the _healthy_ state. We ran the age- and sex-specific models (excluding models for all ages and both sexes), based on the transition probabilities in Table 1. The percentage of attributable deaths by cause at the end of the time cycles are summarized in Table 4.
+
+```{r results_2state, results='asis'}
+
+# Load results
+dtype.summary.file <- file.path(dataDir, 'dtype.summary.list.rds')
+
+if (!file.exists(dtype.summary.file)) {
+
+  dtype.summary.list <- list()
+  
+  for (i in 1:8) {
+    # Load results
+    filefullpath <- file.path(dataDir,paste0('sim_',i,'_2state_v2.rds'))
+    sim <- readRDS(filefullpath)
+    m.dtype <- sim$m.dtype
+    
+    n.i <- nrow(m.dtype)
+    
+    # Output matrices
+    library(data.table)
+    
+    wideToLong <- function(mat) {
+      mat.dt <- as.data.table(mat)
+      mat.dt$ind <- as.numeric(gsub("ind ","",row.names(mat.dt)))
+      mat.dt.melt <- reshape2::melt(mat.dt, id.vars = "ind", variable.name = "cycle")
+      mat.dt.melt$cycle <- as.numeric(gsub("cycle.","",mat.dt.melt$cycle))  
+      return(mat.dt.melt)
+    }
+    
+    m.dtype.dt.melt <- wideToLong(m.dtype)
+    
+    # summary of number of deaths by cause
+    dtype.summary.list[[i]] <- m.dtype.dt.melt[c('ind','value')] %>%
+      filter(!is.na(value)) %>%
+      distinct() %>%
+      group_by(value) %>%
+      summarise(count = n()) %>%
+      mutate(total = n.i,
+             percent = count*100/n.i)
+    
+    gc()
+  }
+  
+  saveRDS(dtype.summary.list, dtype.summary.file)
+} else {
+  dtype.summary.list <- readRDS(dtype.summary.file)
+}
+
+# Create table
+dtype.summary.list <- lapply(1:8, function(i) {
+  dtype.summary.list[[i]][,c('age','sex')] <- transProb[i,c('age','sex')]
+  return(dtype.summary.list[[i]])
+})
+
+dtype.summary <- do.call(rbind, dtype.summary.list)
+
+dtype.summary.count <- spread(dtype.summary[c('age','sex','total','value','count')], value, count)
+dtype.summary.percent <- spread(dtype.summary[c('age','sex','total','value','percent')], value, percent)
+ 
+dtype.summary.wide <- merge(dtype.summary.count, dtype.summary.percent, by = c('age','sex','total'))
+names(dtype.summary.wide) <- gsub('\\.','_',
+                                  gsub('Non-','Non',names(dtype.summary.wide)))
+
+dtype.summary.wide[is.na(dtype.summary.wide)] <- 0
+
+ft_sim_summary <- dtype.summary.wide[c('age','sex','total','Alcoholic_x','Nonalcoholic_x','Both_x',
+                     'Alcoholic_y','Nonalcoholic_y','Both_y')] %>%
+  flextable() %>%
+  set_caption("Microsimulation results: percentage (%) of deaths attributable to alcoholic or non-alcoholic causes by age and sex groups") %>% 
+  set_header_labels(age = "Age group", sex = "Sex", total = "Total population",
+  Alcoholic_x = "Alcoholic deaths", Nonalcoholic_x = "Non-alcoholic deaths",
+  Both_x = "Deaths due to both alcoholic and non-alcoholic causes",
+  Alcoholic_y = "Percent of alcoholic deaths (%)", Nonalcoholic_y = "Percent of non-alcoholic deaths (%)",
+  Both_y = "Percent of deaths due to both alcoholic and non-alcoholic causes (%)") %>%
+  style(pr_t = fp_text(bold = TRUE), part = "header") %>%
+  fontsize(size = 8) %>%
+  hline(i = 1:7) %>%
+  width(j = 1:2, width = 0.6) %>%
+  width(j = 3:9, width = 0.85)
+flextable_to_rmd(ft_sim_summary)
+
+```
+
+## Detail results for randomly selected individuals
+
+Here we provide the more detail results for selected individuals among males ages 16-24. Heat maps below show the health state of selected individuals (n=100) over time cycles, the randomly generated uniform numbers to determine transition to death or not, and the quality-adjusted life years (healthy = 1, death = 0).
+
+```{r results_2state_detail, cache=TRUE}
+
+## Load results
+i <- 1 # select stratum
+
+longtablessubpath <- file.path(dataDir,paste0('sim_',i,'_2state_v2_longtables_sub.rds'))
+
+longtablessub  <- readRDS(longtablessubpath)
+
+m.M.dt.melt.sub = longtablessub$m.M.dt.melt.sub
+m.M1.dt.melt.sub = longtablessub$m.M1.dt.melt.sub
+m.M2.dt.melt.sub = longtablessub$m.M2.dt.melt.sub
+m.dtype.dt.melt.sub = longtablessub$m.dtype.dt.melt.sub
+m.un1.dt.melt.sub = longtablessub$m.un1.dt.melt.sub
+m.un2.dt.melt.sub = longtablessub$m.un2.dt.melt.sub
+m.E.dt.melt.sub = longtablessub$m.E.dt.melt.sub
+
+m.M12dtype.dt.melt.file <- file.path(dataDir, paste0('m.M12dtype.dt.melt_',i,'.rds'))
+m.M12dtype.dt.melt <- readRDS(m.M12dtype.dt.melt.file)
+
+select.ind <- unique(m.M.dt.melt.sub$ind)
+
+```
+
+
+```{r results_2state_detail_heatmap, fig.height = 4, fig.width = c(3.5, 8, 8, 7), fig.cap=c("Figure 2. Heat maps of health state of selected individuals", "Figure 3. Heat maps of randomly generated uniform numbers for alcoholic path", "Figure 4. Heat maps of randomly generated uniform numbers for non-alcoholic path", "Figure 5. Heat maps of the quality-adjusted life years (healthy = 1, death = 0)")}
+
+# Plot heat maps
+library(ggplot2)
+ggplot(m.M.dt.melt.sub, aes(cycle, idx)) + 
+  geom_tile(aes(fill = state), colour = "white")  +   
+  scale_fill_manual(values= c("darkgreen","purple","red")) %>%
+  labs(y = "Individual")
+
+ggplot(m.un1.dt.melt.sub, aes(cycle, idx)) +
+  geom_tile(aes(fill = value)) +
+    scale_fill_gradient2(low = "navy", mid = "white", high = "red",
+                       midpoint = 0.5, na.value = "grey50", guide = "colourbar", aesthetics = "fill") +
+  labs(y = "Individual", fill = 'Randomly sampled uniform\nnumber for "alcoholic" path\n(extremely high value would\ntransition to death)')
+
+ggplot(m.un2.dt.melt.sub, aes(cycle, idx)) +
+  geom_tile(aes(fill = value)) +
+    scale_fill_gradient2(low = "navy", mid = "white", high = "red",
+                       midpoint = 0.5, na.value = "grey50", guide = "colourbar", aesthetics = "fill") +
+  labs(y = "Individual", fill = 'Randomly sampled uniform\nnumber for "non-alcoholic" path\n(extremely high value would\ntransition to death)')
+
+ggplot(m.E.dt.melt.sub, aes(cycle, idx)) + 
+  geom_tile(aes(fill = value)) + 
+  labs(y = "Individual", fill = 'Quality-adjusted life years')
+
+```
+
+Table 5 shows the attributable cause of death among the selected individuals who died:
+
+```{r results_2state_detail_table, results='asis'}
+
+# Table for attributable cause of death
+m.M12dtype.dt.melt.sub <- m.M12dtype.dt.melt[c("ind","cycle","value.alcoholic","value.nonalcoholic","value.attributable","value.combined")] %>%
+  filter(ind %in% select.ind) %>%
+  filter((value.alcoholic == "H" & value.nonalcoholic == "D") | (value.alcoholic == "D" & value.nonalcoholic == "H"))
+
+ft_sim_dtype_sub <- m.M12dtype.dt.melt.sub %>%
+  mutate(ind = as.character(ind)) %>%
+  flextable() %>%
+  set_caption("Microsimulation results: selected deaths attributable to alcoholic or non-alcoholic causes") %>% 
+  set_header_labels(ind = "Individual", cycle = "Cycle", value.alcoholic = "State for alcoholic path",
+  value.nonalcoholic = "State for non-alcoholic path", value.attributable  = "Cause of death",
+  value.combined = "Combined state") %>%
+  style(pr_t = fp_text(bold = TRUE), part = "header") %>%
+  fontsize(size = 9) %>%
+  hline(i = 1) %>%
+  width(width = 1)
+
+flextable_to_rmd(ft_sim_dtype_sub)
+
+```
+
+#	Questions for Michael Wolfson
+
+1. Is it reasonable to combine alcoholic and non-alcoholic transition probabilities in this "parallel" method?
+
+2. Since our interest is in age- and sex-specific deaths, is there any benefit in running microsimulation models for both sexes or all ages? Can we sum up the age- and sex-specific results to obtain the total deaths for both sexes or all ages?
+
+3. Ideally, we should perform three-state model with an intermediate state for morbidity or hospitalization. However, given the difficulty in finding the morbidity to mortality transition probabilities from the literature, we only performed the two-state model. What are your advice on this?
+
+# References
+
+<div id="refs"></div>
+  

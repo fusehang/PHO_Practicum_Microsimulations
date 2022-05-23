@@ -1,0 +1,558 @@
+---
+title: Intro to microsimuation and demo
+author: Hana Fu
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  ioslides_presentation:
+    widescreen: true
+    smaller: true
+number_sections: true
+---
+  
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+
+```{r lib, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(kableExtra)
+library(ggplot2)
+
+```
+
+# What is microsimulation
+
+## Introduction
+
+- Inform health policies for complex health and health system problems
+- Allows policymakers to examine the results, consequences, and benefits of a policy 
+- Implemented the areas of cancer treatment, obesity, and chronic diseases
+- Employed by Canadian agencies (Statistics Canada, Health Canada), project future incidence and prevalence of risk factors and diseases
+- Population Health Model (POHEM) Son Canadian population
+
+## Individual-based state-transition
+
+- Model the individual-based state-transition and outcomes
+- Monte Carlo (MC) simulation methods
+- Stochastic variation of state-transition and individual characteristics
+- Simulate the impact of interventions or policies on individual trajectories 
+- Outcomes can be generated for each individual (e.g. health cost, Quality Adjusted Life Years (QALYs)), estimate the distribution of an outcome
+- Flexibility, the transition probabilities can depend on the history prior to that cycle
+
+## Health states and transition probabilities
+
+<img src="G:/My Drive/Biostatistics/Courses/CHL5207_Practicum/PHO/Presentations/Transition_Probability.png" width="800" alt="CAPTION" />
+
+- Transition probabilites (or risk) can be derived from multi-state model or survival models
+
+## Model parameters
+
+- Population size
+- Transition probabilities between health states
+- Number of cycles
+- Individual characteristics
+
+```{r sim}
+
+sim <- readRDS(file = 'C:\\Users\\Hana.Fu\\Documents\\sim.rds')
+
+```
+
+```{r prepare_graphs}
+
+library(tidyverse)
+m.M <- sim$m.M
+m.E <- sim$m.E
+m.un <- sim$m.un
+arr.p <- sim$arr.p
+
+m.M.df <- data.frame(m.M)
+m.M.df$ind <- as.numeric(gsub("ind ","",row.names(m.M.df)))
+m.M.df.melt <- reshape2::melt(m.M.df, id.vars = "ind", variable.name = "cycle")
+m.M.df.melt$cycle <- as.numeric(gsub("cycle.","",m.M.df.melt$cycle))
+m.M.df.melt$state <- factor(m.M.df.melt$value, levels=c("H","S","D"))
+levels(m.M.df.melt$state) <- c("Healthy","Sick","Death")
+m.M.df.melt.sub <- m.M.df.melt %>% filter(ind %in% 1:50)
+
+m.un.df <- data.frame(m.un)
+m.un.df$ind <- as.numeric(gsub("ind ","",row.names(m.un.df)))
+m.un.df.melt <- reshape2::melt(m.un.df, id.vars = "ind", variable.name = "cycle")
+m.un.df.melt$cycle <- as.numeric(gsub("cycle.","",m.un.df.melt$cycle))
+m.un.df.melt.sub <- m.un.df.melt %>% filter(ind %in% 1:50)
+
+m.E.df <- data.frame(m.E)
+m.E.df$ind <- as.numeric(gsub("ind ","",row.names(m.E.df)))
+m.E.df.melt <- reshape2::melt(m.E.df, id.vars = "ind", variable.name = "cycle")
+m.E.df.melt$cycle <- as.numeric(gsub("cycle.","",m.E.df.melt$cycle))
+m.E.df.melt.sub <- m.E.df.melt %>% filter(ind %in% 1:50)
+
+```
+
+## Model output
+### Individual-based state transition
+
+```{r graph_state}
+
+library(ggplot2)
+ggplot(m.M.df.melt.sub, aes(cycle, ind)) + 
+  geom_tile(aes(fill = state), colour = "white")  +   
+  scale_fill_manual(values= c("darkgreen","purple","red2")) +
+  labs(x = 'Cycle', y = 'Individual')
+
+```
+
+The number health states (Healthy, Sick, Death) per cycle or per individual can be summarised.
+
+## 
+### Other health outcomes
+
+```{r graph_qalys}
+
+ggplot(m.E.df.melt.sub, aes(cycle, ind)) + 
+  geom_tile(aes(fill = value)) +
+  labs(fill = 'QALYs') +
+  labs(x = 'Cycle', y = 'Individual')
+
+```
+
+Similarly, the QALYs per cycle or per individual can be summarised.
+
+
+##
+### Trace the transition probabilites at each cycle
+
+```{r graph_tp}
+
+ind <- sample(1:nrow(arr.p[,,1]), 15, replace = FALSE)
+ind <- sort(ind)
+
+arr.p.cycle1to3 <-cbind(
+  arr.p[ind,,10],
+  arr.p[ind,,11],
+  arr.p[ind,,12]
+  )
+
+colnames(arr.p.cycle1to3) <- gsub("state 3","State 'D'",
+                                  gsub("state 2","State 'S'",
+                                    gsub("state 1","State 'H'", colnames(arr.p.cycle1to3))))
+
+# Kable
+library(kableExtra)
+
+arr.p.cycle1to3 %>% 
+  kable(escape = F) %>%
+  kable_paper("hover", full_width = F) %>%
+  kable_styling("striped") %>%
+  add_header_above(c("Individual" = 1,"Cycle 1" = 3,"Cycle 3" = 3,"Cycle 3" = 3))
+
+```
+
+# Live demo
+
+```{r load_data, cache=TRUE}
+
+dataDir <- 'H:\\Microsimulations\\Data'
+
+load(file.path(dataDir,'cchs2013_14_Ontario.RData'))
+
+```
+
+```{r cchs_vars, cache=TRUE}
+
+cchs2013_14_Ontario$sex <- factor(cchs2013_14_Ontario$DHH_SEX, labels=c("Male","Female"))
+
+cchs2013_14_Ontario$agecat <- cut(cchs2013_14_Ontario$DHH_AGE, c(12,30,40,50,60,70,80,105), 
+                                  include.lowest = TRUE, right = FALSE)
+levels(cchs2013_14_Ontario$agecat) <- c("12-29","30-39","40-49","50-59","60-69","70-79","80+")
+
+cchs2013_14_Ontario$educat <- factor(cchs2013_14_Ontario$EDUDR04, 
+                                     labels=c("Less than secondary","Secondary school grad", 
+                                     "Some post-secondary", "Post-secondary grad", "NS"),
+                                     levels =c(1,2,3,4,9))
+
+cchs2013_14_Ontario$incpercat <- with(cchs2013_14_Ontario,
+                                      ifelse(INCDPER < 10 | INCDPER %in% c(96,99), INCDPER,
+                                             ifelse(INCDPER %in% c(10,11), 10,
+                                                    ifelse(INCDPER %in% c(12,13), 11, 
+                                                           ifelse(INCDPER == 14, 12, NA)))))
+
+cchs2013_14_Ontario$incpercat <- factor(cchs2013_14_Ontario$incpercat,
+                                        labels = c("No income", "LESS THAN $5,000", "$5,000 TO $9,999", "$10,000 TO $14,999", "$15,000 TO $19,999", "$20,000 TO $29,999", "$30,000 TO $39,999", "$40,000 TO $49,999", "$50,000 TO $59,999", "$60,000 TO $79,999","$80,000 TO 99,999","$100k or more","NS"),
+                                        levels =c(1:12,99))
+
+cchs2013_14_Ontario$inchhcat <- with(cchs2013_14_Ontario,
+                                      ifelse(INCDHH < 10 | INCDHH %in% c(96,99), INCDHH,
+                                             ifelse(INCDHH %in% c(10,11), 10,
+                                                    ifelse(INCDHH %in% c(12,13), 11, 
+                                                           ifelse(INCDHH %in% c(14,15), 12, NA)))))
+cchs2013_14_Ontario$inchhcat <- factor(cchs2013_14_Ontario$inchhcat,
+                                        labels = c("No income", "LESS THAN $5,000", "$5,000 TO $9,999", "$10,000 TO $14,999", "$15,000 TO $19,999", "$20,000 TO $29,999", "$30,000 TO $39,999", "$40,000 TO $49,999", "$50,000 TO $59,999", "$60,000 TO $79,999","$80,000 TO 99,999","$100k or more","NS"),
+                                        levels =c(1:12,99))
+
+cchs2013_14_Ontario$ethncat <- factor(cchs2013_14_Ontario$SDCDCGT,
+                                      labels = c('White','Black','Korean','Filipino','Japanese','Chinese','South Asian','South East Asian','Arab','West Asian','Latin American','Other Racial or Cultural Origin','Multiple Racial/Cultural Origins','NA','NS'),
+                                      levels = c(1:13,96,99))
+
+cchs2013_14_Ontario$maritalcat <- factor(cchs2013_14_Ontario$DHH_MS,
+  labels = c('Married','Common-Law','Widowed','Separated','Divorced','Single/Never Married','DK','Refusal','NS'),
+  levels = c(1:6,97,98,99))
+
+cchs2013_14_Ontario$geourcat <- factor(cchs2013_14_Ontario$GEODUR2,
+       labels=c("Population Centre", "Rural"),
+       levels=c(1,2))
+
+cchs2013_14_Ontario$alcfreqcat <- factor(cchs2013_14_Ontario$ALC_2,
+                                         labels = c('less than once a month','once a month','2 to 3 times a month','once a week','2 to 3 times a week','4 to 6 times a week','every day','NA','DK','Refusal','NS'),
+                                         levels = c(1:7,96:99))
+
+cchs2013_14_Ontario$alctypecat <- factor(cchs2013_14_Ontario$ALCDTTM,
+                                         labels = c("Regular drinker","Occasional drinker","Did not drink in the last 12 months","NS"),
+                                         levels = c(1,2,3,9))
+
+cchs2013_14_Ontario$alchvycat <- with(cchs2013_14_Ontario,
+                                      ifelse(ALC_3 %in% 1:2, 2, # 1 is heavy drinking
+                                        ifelse(ALC_3 %in% 3:6, 1, # 2 did not have heaving drinking
+                                               ifelse(ALC_3 %in% 96:99, ALC_3, NA))))
+
+cchs2013_14_Ontario$alchvycat <- factor(cchs2013_14_Ontario$alchvycat,
+                                        labels = c("Heavy drinking in the past year at least once per month","Did not heavy drink in the past year","NA","DK","Refusal","NS"),
+                                        levels = c(1:2,96:99))
+
+```
+
+## CCHS data snapshot and survey weights
+
+```{r data_snapshot}
+
+DT::datatable(cchs2013_14_Ontario[1:50,
+                                  c('agecat', 'sex', 'educat', 'incpercat', 'inchhcat', 'ethncat',
+                                    'maritalcat', 'geourcat','WTS_S')], 
+              colnames=c("Age group","Sex","Education","Income (personal)","Income (household)",
+                      "Ethnicity","Marital Status","Urban/Rural", "WTS_S (survey weight)"),
+              filter = 'top',
+              options = list(pageLength = 6))
+
+
+```
+
+## Select specific stratum
+
+On sex, education-level, and geography
+
+```{r data_snapshot_sub, echo=TRUE}
+
+cchs2013_14_Ontario_sub <- cchs2013_14_Ontario %>%
+  filter(sex == "Female" & educat == "Less than secondary" & geourcat == "Rural")
+
+# Snapshot on the stratum and survey weights  
+DT::datatable(cchs2013_14_Ontario_sub[,c('agecat','sex','educat','geourcat','WTS_S')], rownames = FALSE,
+              colnames=c("Age", "Sex", "Education", "Geography", "WTS_S (survey weights)"),
+              options = list(pageLength = 10))
+
+# Sum of survey weights, that's the survey weighted population
+wts_pop <- sum(cchs2013_14_Ontario_sub$WTS_S)
+
+cat('Population =',wts_pop)
+
+```
+
+## Model parameters
+
+```{r model_param, echo=TRUE}
+
+# Model input
+n.i   <- round(wts_pop)  # number of simulated individuals
+n.t   <- 30              # time horizon, 30 cycles
+v.n   <- c("H","S","D")  # the model states: Healthy (H), Sick (S), Dead (D)
+n.s   <- length(v.n)     # the number of health states
+v.M_1 <- rep("H", n.i)   # everyone begins in the healthy state 
+d.c   <- d.e <- 0.03     # equal discounting of costs and QALYs by 3%
+samplev.m <- 2           # argument use for samplev() function 
+
+# Transition probabilities (per cycle)
+p.HD  <- 0.005               # probability to die when healthy (REQUIRED)
+p.HS  <- 0.10          	     # probability to become sick when healthy (REQUIRED)
+p.SH  <- 0.6           	     # probability to become healthy when sick (REQUIRED)
+rr.S  <- 2.5             	     # rate ratio of death when sick vs healthy (REQUIRED)
+r.HD  <- -log(1 - p.HD) 	   # rate of death when healthy (derived)
+r.SD  <- rr.S * r.HD  	     # rate of death when sick (derived)
+p.SD  <- 1 - exp(- r.SD)     # probability to die when sick (derived)
+rp.S  <- 0.2                 # increase of the mortality rate with every additional year being sick
+
+```
+
+```{r model_param_qaly, echo=TRUE}
+
+# DALY inputs
+u.H     <- 1                   # utility when healthy 
+u.S     <- 0.75                # utility when sick 
+ru.S    <- 0.03                # increase in utility of treated sick individuals with every additional year being sick
+v.x     <- runif(n.i, 0.95, 1.05) # vector capturing individuals' effect modifier at baseline
+
+```
+
+```{r functions}
+
+##################################### Functions ###########################################
+
+# THE NEW samplev() FUNCTION
+# efficient implementation of the rMultinom() function of the Hmisc package #### 
+
+samplev <- function (probs, m) { # probs is a n x k dimenion matrix, with n = n.i (number of individuals) and k = n.s (number of health states), that is it contains the transition probabilities to various health state for each individual. m is the number of health state(s) to return per person for the next cycle, not entirely sure why this option is offered, it has a default of m = 1, maybe it gives an option to sample again from the possible m health states? 
+  d <- dim(probs) # gives the dimension of the probs matrix
+  n <- d[1] # return n.i
+  k <- d[2] # return n.s
+  lev <- dimnames(probs)[[2]] # return names of health states
+  if (!length(lev)) # if the probs matrix doesn't have column names 
+    lev <- 1:k # set lev as 1:k to represent names of health states 
+  ran <- matrix(lev[1], ncol = m, nrow = n) # create a matrix with the name of first health state, to store health state in next cycle
+  un <- matrix(NA, ncol = m, nrow = n) # create a matrix to store randomly generated uniform numbers
+  U <- t(probs) # U is a transpose of probs matrix, thus it is a k x n matrix
+  for(i in 2:k) {
+    U[i, ] <- U[i, ] + U[i - 1, ] # This converts the transition probabilities to "cumulative probabilities", it applies to all individual at once. 
+    # For example, if the current health state for individual j is "healthy", the transition probabilities is c(0.845, 0.15, 0.005), then U[,j] becomes c(0.845,0.995,1).
+  }
+  if (any((U[k, ] - 1) > 1e-05))
+    stop("error in multinom: probabilities do not sum to 1")
+  
+  for (j in 1:m) { # looping through 
+    un[, j] <- runif(n) 
+    un.k <- rep(un[, j], rep(k, n)) # returns a n x k length vector, where random uniform number for each person is repeated k times (correspond to the number of health states)
+    ran[, j] <- lev[1 + colSums(un.k > U)] # colSums(un > U) obtain the sum for each person that the "un" is greater than the transition probabilities of the health states. 
+    # For example, if the transition probabilies are c(0.845,0.995,1) and "un" for the person is c(0.85, 0.85, 0.85), then colSUms(un > U) equals to 1. 
+    # Including "1 +" so to select the health state for the next cycle, that is lev[1+1] is "S", the person's health state in the next cycle is "S". 
+  }
+  return(list(ran=ran, un=un))
+}
+# The MicroSim function for the simple microsimulation of the 'Sick-Sicker' model keeps track of what happens to each individual during each cycle. 
+
+MicroSim <- function(v.M_1, n.i, n.t, v.n, samplev.m, X = NULL, d.e, TR.out = TRUE, TS.out = TRUE, seed = 1) {
+  # Arguments:  
+  # v.M_1:   vector of initial states for individuals
+  # n.i:     number of individuals
+  # n.t:     total number of cycles to run the model
+  # v.n:     vector of health state names
+  # X:       vector or matrix of individual characteristics
+  # d.e:     discount rate for health outcome (QALYs)
+  # TR.out:  should the output include a Microsimulation trace? (default is TRUE)
+  # TS.out:  should the output include a matrix of transitions between states? (default is TRUE)
+  # seed:    starting seed number for random number generator (default is 1)
+  # Makes use of:
+  # Probs:   function for the estimation of transition probabilities
+  # Effs:    function for the estimation of state specific health outcomes (QALYs)
+  
+  v.dwe <- 1 / (1 + d.e) ^ (0:n.t)   # calculate the QALY discount weight based on the discount rate d.e
+  
+  # Create the matrix capturing the state name/health outcomes for all individuals at each time point 
+  m.M <- m.E <- matrix(nrow = n.i, ncol = n.t + 1, 
+                       dimnames = list(paste("ind", 1:n.i, sep = " "), 
+                                       paste("cycle", 0:n.t, sep = " ")))  
+  
+  m.M[, 1] <- v.M_1                     # indicate the initial health state
+  
+  # Create matrix to store randomly generated uniform numbers
+  m.un <- matrix(rep(NA, n.i*n.t), nrow = n.i, ncol = n.t,
+                  dimnames = list(paste("ind", 1:n.i, sep = " "), 
+                                  paste("cycle", 1:n.t, sep = " "))) 
+  
+  # Create array to store transition probabilities
+  arr.p <- array(NA, dim = c(n.i, n.s, n.t + 1),
+                 dimnames = list(paste("ind", 1:n.i, sep = " "), 
+                                 paste("state", 1:n.s, sep = " "),
+                                 paste("cycle", 0:n.t, sep = " "))) 
+  
+  arr.p[,, 1] <- rep(c(1 - p.HS - p.HD, p.HS, p.HD), each = n.i)
+  
+  set.seed(seed)                  # set the seed for every individual for the random number generator
+  
+  # create the dur variable that stores the number of consecutive cycles the individual occupies either when sick or sicker
+  dur <- rep(0, n.i)                # the individual start without history        
+  m.E[, 1] <- Effs (m.M[, 1], dur, X = X)  # estimate QALYs per individual for the initial health state
+  
+  for (t in 1:n.t) { # t <- 3
+    m.p <- Probs(m.M[, t], dur)           # calculate the transition probabilities at cycle t 
+    
+    arr.p[,, t+1] <-  m.p # store the transition probabilities
+    
+    ran.un <- samplev(prob = m.p, m = samplev.m) # returns a matrix of the health states and a matrix of randomly generated uniform numbers
+
+  
+    # this is Hana's guess of the function of the m argument in samplev() function
+    if (samplev.m > 1) { 
+      which.m <- sample(1:samplev.m, size = 1) # pick which m index to use 
+      
+      m.un[, t] <- ran.un[['un']][, which.m] # store the matrix of randomly generated uniform numbers for each cycle
+      m.M[, t + 1] <- ran.un[['ran']][, which.m]  # sample the next health state and store that state in matrix m.M
+    } else {
+      m.un[, t] <- ran.un[['un']][, which.m]
+      m.M[, t + 1] <- ran.un[['ran']]
+    }
+    
+    m.E[, t + 1] <- Effs( m.M[, t + 1], dur, X = X)   # estimate QALYs per individual during cycle t + 1 conditional on treatment
+    
+    dur <- ifelse(m.M[, t + 1] == "S", 
+                  dur + 1, 
+                  0) # updates duration (add 1) if person is in "Sick" state, else assign duration as zero, can be updated to consider previous duration in "Sick" state even if the person returns back to "Healthy" states
+    
+    cat('\r', paste(round(t/n.t * 100), "% done", sep = " "))       # display the progress of the simulation
+    
+  } # close the loop for the time points 
+  
+  
+  te <- m.E %*% v.dwe       # total (discounted) QALYs per individual 
+  
+  te_hat <- mean(te)        # average (discounted) QALYs
+  
+  if (TS.out == TRUE) {  # create a matrix of transitions across states
+    TS <- paste(m.M, cbind(m.M[, -1], NA), sep = "->") # transitions from one state to the other
+    TS <- matrix(TS, nrow = n.i)
+    rownames(TS) <- paste("Ind",   1:n.i, sep = " ")   # name the rows 
+    colnames(TS) <- paste("Cycle", 0:n.t, sep = " ")   # name the columns 
+  } else {
+    TS <- NULL
+  }
+  
+  if (TR.out == TRUE) {
+    TR <- t(apply(m.M, 2, function(x) table(factor(x, levels = v.n, ordered = TRUE))))
+    TR <- TR / n.i                                       # create a distribution trace
+    rownames(TR) <- paste("Cycle", 0:n.t, sep = " ")     # name the rows 
+    colnames(TR) <- v.n                                  # name the columns 
+  } else {
+    TR <- NULL
+  }
+  results <- list(m.p = m.p, arr.p = arr.p, m.M = m.M, m.E = m.E, te = te, te_hat = te_hat, m.un = m.un, TS = TS, TR = TR) # store the results from the simulation in a list  
+  return(results)  # return the results
+}  # end of the MicroSim function  
+
+
+#### Probability function
+# The Probs function that updates the transition probabilities of every cycle is shown below.
+
+Probs <- function(M_it, dur) { 
+  # M_it:   health state occupied by individual i at cycle t (character variable)
+  # dur:    the duration of being sick (sick/sicker)
+  
+  m.p.it <- matrix(NA, n.s, n.i)     # create vector of state transition probabilities
+  rownames(m.p.it) <- v.n            # assign names to the vector
+  
+  # update probabilities of death after first converting them to rates and applying the rate ratio
+  r.SD <-  - log(1 - p.SD)
+  p.SD <- 1 - exp(- r.SD * (1 + dur[M_it == "S"] * rp.S)) # calculate p.SD conditional on duration of being sick
+  
+  # update the v.p with the appropriate probabilities   
+  m.p.it[,M_it == "H"]  <- c(1 - p.HS - p.HD, p.HS, p.HD)                  # transition probabilities when healthy
+  m.p.it[,M_it == "S"] <- rbind(p.SH, 1- p.SH - p.SD, p.SD)   # transition probabilities when sick
+  m.p.it[,M_it == "D"]  <- c(0, 0, 1)                                        # transition probabilities when dead   
+  ifelse(colSums(m.p.it) == 1, return(t(m.p.it)), print("Probabilities do not sum to 1")) # return the transition probabilities or produce an error
+}       
+
+
+### Health outcome function 
+# The Effs function to update the utilities at every cycle.
+
+Effs <- function (M_it, dur, cl = 1, X = NULL) {
+  # M_it: health state occupied by individual i at cycle t (character variable)
+  # dur:  the duration of being sick
+  # cl:   cycle length (default is 1)
+  # X:    the vector or matrix of individual characteristics (optional)
+  
+  u.it               <- 0        # by default the utility for everyone is zero
+  u.it[M_it == "H"]  <- u.H      # update the utility if healthy
+  u.it[M_it == "S"] <- X[which(M_it == "S")] * ( u.S + dur[which(M_it == "S")] * ru.S ) # update the utility if sick conditional on treatment and duration of being sick
+  u.it[M_it == "D"]  <- 0        # update the utility if dead
+  
+  QALYs <-  u.it * cl            # calculate the QALYs during cycle t
+  return(QALYs)                  # return the QALYs
+}
+
+```
+
+
+## Run the simulation
+
+```{r sim_demo, echo=TRUE, eval=FALSE}
+
+##################################### Run the simulation ##################################
+# START SIMULATION
+p = Sys.time()
+sim <- MicroSim(v.M_1, n.i, n.t, v.n, samplev.m, X = v.x, d.e, seed = 100)  # run for treatment
+comp.time = Sys.time() - p
+
+cat('\n',comp.time)
+
+
+```
+
+## Model summary
+
+```{r model_summary_demo}
+
+################################# Summary of microsimulation model #############################
+
+library(tidyverse)
+m.M <- sim$m.M
+m.E <- sim$m.E
+m.un <- sim$m.un
+arr.p <- sim$arr.p
+
+m.M.df <- data.frame(m.M)
+m.M.df$ind <- as.numeric(gsub("ind ","",row.names(m.M.df)))
+m.M.df.melt <- reshape2::melt(m.M.df, id.vars = "ind", variable.name = "cycle")
+m.M.df.melt$cycle <- as.numeric(gsub("cycle.","",m.M.df.melt$cycle))
+m.M.df.melt$state <- factor(m.M.df.melt$value, levels=c("H","S","D"))
+m.M.df.melt.sub <- m.M.df.melt %>% filter(ind %in% 1:50)
+
+m.E.df <- data.frame(m.E)
+m.E.df$ind <- as.numeric(gsub("ind ","",row.names(m.E.df)))
+m.E.df.melt <- reshape2::melt(m.E.df, id.vars = "ind", variable.name = "cycle")
+m.E.df.melt$cycle <- as.numeric(gsub("cycle.","",m.E.df.melt$cycle))
+m.E.df.melt.sub <- m.E.df.melt %>% filter(ind %in% 1:50)
+
+```
+
+
+## Model output
+### Individual-based state transition
+
+```{r graph_state_demo}
+
+library(ggplot2)
+ggplot(m.M.df.melt.sub, aes(cycle, ind)) + 
+  geom_tile(aes(fill = state), colour = "white")  +   
+  scale_fill_manual(values= c("darkgreen","purple","red2")) +
+  labs(x = 'Cycle', y = 'Individual')
+
+```
+
+## 
+### Other health outcomes
+
+```{r graph_qalys_demo}
+
+ggplot(m.E.df.melt.sub, aes(cycle, ind)) + 
+  geom_tile(aes(fill = value)) +
+  labs(fill = 'qALYs') +
+  labs(x = 'Cycle', y = 'Individual')
+
+```
+
+## Count by health state by cycle
+
+```{r count_state}
+
+m.M.df.agg <- m.M.df.melt %>%
+  group_by(state, cycle) %>%
+  summarise(count = n()) %>% 
+  pivot_wider(names_from = state, values_from = count, values_fill = 0) 
+
+DT::datatable(m.M.df.agg, rownames = FALSE,
+              colnames=c("Cycle","Healthy","Sick","Death"),
+              options = list(pageLength = 10))
+
+
+```
+

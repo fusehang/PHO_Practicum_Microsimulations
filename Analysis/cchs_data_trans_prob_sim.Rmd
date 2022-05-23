@@ -1,0 +1,1055 @@
+---
+title: CCHS Ontario population for microsimulations
+author: Hana Fu
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    number_sections: true
+---
+  
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+
+```{r lib, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(kableExtra)
+library(ggplot2)
+
+```
+
+```{r load_data}
+
+dataDir <- 'D:\\Microsimulations\\Data'
+
+load(file.path(dataDir,'cchs2013_14_Ontario.RData'))
+
+saveRDS(cchs2013_14_Ontario[1:200,], file.path(dataDir,'cchs2013_14_Ontario2.rds'))
+
+```
+
+
+```{r wts, eval=FALSE}
+
+idx <- grep('WTS_S|BSW', names(cchs2013_14_Ontario))
+table(round(colSums(cchs2013_14_Ontario[idx])))
+
+```
+
+<!-- # Create factor variables -->
+  
+```{r cchs_vars, echo=TRUE}
+
+cchs2013_14_Ontario$sex <- factor(cchs2013_14_Ontario$DHH_SEX, labels=c("Male","Female"))
+
+cchs2013_14_Ontario$agecatold <- cut(cchs2013_14_Ontario$DHH_AGE, c(12,30,40,50,60,70,80,105), 
+                                  include.lowest = TRUE, right = FALSE)
+levels(cchs2013_14_Ontario$agecatold) <- c("12-29","30-39","40-49","50-59","60-69","70-79","80+")
+
+cchs2013_14_Ontario$agecat <- cut(cchs2013_14_Ontario$DHH_AGE, c(12,16,25,35,55,105), 
+                                  include.lowest = TRUE, right = FALSE)
+levels(cchs2013_14_Ontario$agecat) <- c("12-15","16-24","25-34","35-54","55+")
+
+cchs2013_14_Ontario$educat <- factor(cchs2013_14_Ontario$EDUDR04, 
+                                     labels=c("Less than secondary","Secondary school grad", 
+                                              "Some post-secondary", "Post-secondary grad", "NS"),
+                                     levels =c(1,2,3,4,9))
+
+cchs2013_14_Ontario$incpercat <- with(cchs2013_14_Ontario,
+                                      ifelse(INCDPER < 10 | INCDPER %in% c(96,99), INCDPER,
+                                             ifelse(INCDPER %in% c(10,11), 10,
+                                                    ifelse(INCDPER %in% c(12,13), 11, 
+                                                           ifelse(INCDPER == 14, 12, NA)))))
+
+cchs2013_14_Ontario$incpercat <- factor(cchs2013_14_Ontario$incpercat,
+                                        labels = c("No income", "LESS THAN $5,000", "$5,000 TO $9,999", "$10,000 TO $14,999", "$15,000 TO $19,999", "$20,000 TO $29,999", "$30,000 TO $39,999", "$40,000 TO $49,999", "$50,000 TO $59,999", "$60,000 TO $79,999","$80,000 TO 99,999","$100k or more",'NA',"NS"),
+                                        levels =c(1:12,96,99))
+
+cchs2013_14_Ontario$inchhcat <- with(cchs2013_14_Ontario,
+                                     ifelse(INCDHH < 10 | INCDHH %in% c(96,99), INCDHH,
+                                            ifelse(INCDHH %in% c(10,11), 10,
+                                                   ifelse(INCDHH %in% c(12,13), 11, 
+                                                          ifelse(INCDHH %in% c(14,15), 12, NA)))))
+cchs2013_14_Ontario$inchhcat <- factor(cchs2013_14_Ontario$inchhcat,
+                                       labels = c("No income", "LESS THAN $5,000", "$5,000 TO $9,999", "$10,000 TO $14,999", "$15,000 TO $19,999", "$20,000 TO $29,999", "$30,000 TO $39,999", "$40,000 TO $49,999", "$50,000 TO $59,999", "$60,000 TO $79,999","$80,000 TO 99,999","$100k or more","NS"),
+                                       levels =c(1:12,99))
+
+cchs2013_14_Ontario$ethncat <- factor(cchs2013_14_Ontario$SDCDCGT,
+                                      labels = c('White','Black','Korean','Filipino','Japanese','Chinese','South Asian','South East Asian','Arab','West Asian','Latin American','Other Racial or Cultural Origin','Multiple Racial/Cultural Origins','NA','NS'),
+                                      levels = c(1:13,96,99))
+
+cchs2013_14_Ontario$maritalcat <- factor(cchs2013_14_Ontario$DHH_MS,
+                                         labels = c('Married','Common-Law','Widowed','Separated','Divorced','Single/Never Married','DK','Refusal','NS'),
+                                         levels = c(1:6,97,98,99))
+
+cchs2013_14_Ontario$geourcat <- factor(cchs2013_14_Ontario$GEODUR2,
+                                       labels=c("Population Centre", "Rural"),
+                                       levels=c(1,2))
+
+cchs2013_14_Ontario$alcfreqcat <- factor(cchs2013_14_Ontario$ALC_2,
+                                         labels = c('less than once a month','once a month','2 to 3 times a month','once a week','2 to 3 times a week','4 to 6 times a week','every day','NA','DK','Refusal','NS'),
+                                         levels = c(1:7,96:99))
+
+cchs2013_14_Ontario$alctypecat <- factor(cchs2013_14_Ontario$ALCDTTM,
+                                         labels = c("Regular drinker","Occasional drinker","Did not drink in the last 12 months","NS"),
+                                         levels = c(1,2,3,9))
+
+cchs2013_14_Ontario$alchvycat <- with(cchs2013_14_Ontario,
+                                      ifelse(ALC_3 %in% 1:2, 2, # 1 is heavy drinking
+                                             ifelse(ALC_3 %in% 3:6, 1, # 2 did not have heaving drinking
+                                                    ifelse(ALC_3 %in% 96:99, ALC_3, NA))))
+
+cchs2013_14_Ontario$alchvycat <- factor(cchs2013_14_Ontario$alchvycat,
+                                        labels = c("Heavy drinking in the past year at least once per month","Did not heavy drink in the past year","NA","DK","Refusal","NS"),
+                                        levels = c(1:2,96:99))
+
+```
+
+# Implement survey design
+
+```{r svy_design, echo=TRUE, message=FALSE, warning=FALSE}
+
+# See link for instructions https://stackoverflow.com/questions/45642026/survey-weights-and-boostrap-wieghts-to-get-counts-and-cis
+
+library(survey)
+cchsDesign <- svrepdesign(data = cchs2013_14_Ontario,
+                        weights = ~WTS_S,
+                        repweights = "BSW[0-5]+",
+                        type = "bootstrap",
+                        combined.weights = TRUE,
+                        mse = TRUE)
+
+```
+
+
+# Comparison of original and input data for microsimulation
+
+CCHS baseline data with survey weights are compared with data with rounded weights used for microsimulations. Comparison is based on the proportion of people belonging to different categories of each variable of interest. The two are virtually the same, as observed in the table and barplots below. They are however usedful for determining whether some categories should be merged together due to very low proportions, such as household income categories of low income.
+
+```{r baseline_comparison, fig.width=8, fig.height=7}
+
+# Compare CCHS survey weighted proportion against simulation rounded proprotions
+
+vars <- c('agecat', 'sex', 'educat', 'incpercat', 'inchhcat', 'ethncat', 'maritalcat', 'geourcat','alcfreqcat','alctypecat','alchvycat')
+varnames <- c('Age','Sex','Education','Personal income','Household income','Ethnicity','Marital status','Geography','Alcohol drinking frequency','Type of alcohol drinker','Heavy drinking')
+
+varPropList <- list()
+
+for (v in vars) {
+  cchsProp <- prop.table(
+      svytable(~get(v),
+               design = cchsDesign)) %>%
+      data.frame
+  names(cchsProp) <- c('cat','cchs_prop')
+
+  simProp <- cchs2013_14_Ontario[,c(v,'WTS_S')] %>%
+      mutate(wgt_rd = round(WTS_S)) %>%
+      group_by(get(v)) %>%
+      summarise(wgt_rd = sum(wgt_rd)) %>%
+      mutate(tot_wgt = sum(wgt_rd),
+             prop_wgt = wgt_rd/tot_wgt)
+  names(simProp)[1] <- 'cat'
+  
+  cchsSimProp <- merge(cchsProp, simProp)
+  cchsSimProp$var <- v
+  cchsSimProp$vname <- varnames[match(v,vars)]
+  
+  varPropList[[v]] <- cchsSimProp %>%
+    arrange(cat)
+}
+
+varProp <- do.call(rbind, varPropList)
+varProp$var <- factor(varProp$var, levels=vars)
+
+varProp <- varProp %>% 
+  arrange(var)
+
+```
+
+```{r comparison_table}
+
+# Print table
+varProp[c('vname','cat','cchs_prop','prop_wgt')] %>%
+  kable(row.names = FALSE, col.names = c('Variable','Category','CCHS weighted proportion','Rounded proportions for microsim.')) %>%
+  kable_styling("striped")
+
+```
+
+```{r comparison_barplots}
+
+# Barplots
+for (v in vars) {
+  par(mar = c(9, 3, 2, 0.5), mgp = c(1.8, 0.8, 0))
+  to_plot <- varPropList[[v]][c('cchs_prop','prop_wgt')] %>% as.matrix %>% t
+  
+  vname <- varnames[match(v,vars)]
+  
+  if (v == 'sex') {
+    barplot_func <- function() barplot(to_plot, beside = TRUE, 
+                                       xaxt = 'n', yaxt = 'n', 
+                                       main = vname , ylim = c(0, 0.6),
+                                       col = c('lightskyblue','blue4'),
+                                       border = c('lightskyblue','blue4'))
+  } else {
+    barplot_func <- function() barplot(to_plot, beside = TRUE, 
+                                       xaxt = 'n', yaxt = 'n', 
+                                       main = vname ,
+                                       col = c('lightskyblue','blue4'),
+                                       border = c('lightskyblue','blue4'))
+  }
+  x_at <- matrix(barplot_func(), ncol = 2, byrow = TRUE)
+  x_at <- apply(x_at, 1, mean)
+  
+  x_labels <- gsub('(.{1,20})(\\s|$)', '\\1\n', as.character(varPropList[[v]]$cat))
+  
+  axis(side = 1, at = x_at, labels = x_labels, col='white', las=2)
+  axis(side = 2, las = 2)
+  
+  legend_pos <- ifelse(v %in% c('ethncat','maritalcat','geourcat','alctypecat','alchvycat'),'topright','topleft')
+  legend(legend_pos, legend = c('CCHS weighted','Rounded for microsim.'), 
+         col = c('lightskyblue','blue4'), pch = 15, bty = 'n')
+}
+
+```
+
+# Transition probabilities
+
+```{r load_trans_prob}
+
+transProb <- readxl::read_xlsx(path = file.path(dataDir, 'transition-prob-alc-micro-Hana.xlsx'),
+                  sheet = 2, skip = 1)
+
+transProb$sex <- gsub("M","Male",
+                       gsub("F","Female", transProb$sex))
+
+transProb$agecat <- factor(transProb$age)
+transProb$percent_alcohol_attributable <- transProb$percent_alcohol_attributable/100
+
+transProb[c('age','sex','transition_4_rate_100k','transition_3_rate_100k')] %>%
+  kable(row.names = FALSE, col.names = c('Age','Sex','Alcoholic death rates (per 100K)','Non-alcoholic death rates (per 100K)')) %>%
+  kable_styling("striped")
+
+```
+
+```{r data_list}
+
+# Create a list with data.frame for the corresponding stratum in transProb
+cchsDataList <- list()
+
+for (i in 1:nrow(transProb)) {
+  transProb_sub <- transProb[i,]
+  select_agecat <- transProb_sub$agecat
+  select_sex <- transProb_sub$sex
+  
+  if (select_agecat %in% c('Total','All')) {
+    if (select_sex == 'All') {
+      cchsDataList[[i]] <- cchs2013_14_Ontario # for all ages and both sex
+    } else {
+       cchsDataList[[i]] <- cchs2013_14_Ontario %>% 
+         filter(sex == as.character(select_sex)) # for all ages and by sex
+    }
+  } else {
+    cchsDataList[[i]] <- cchs2013_14_Ontario %>% 
+      filter(agecat == as.character(select_agecat) & sex == as.character(select_sex)) # for specific age and sex
+  }
+}
+
+rm(cchs2013_14_Ontario)
+
+```
+
+
+# Combine alcoholic and non-alcholic attributable transition probabilities
+
+## Poor method
+
+```{r flowchart_v1}
+
+library(DiagrammeR)
+grViz("digraph flowchart {
+      # node definitions with substituted label text
+      graph [layout = dot, rankdir = LR]
+      node [fontname = Helvetica, shape = rectangle, style=filled]        
+      tab1 [label = 'Alcoholic attr. mort. rate', color = orange]
+      tab2 [label = 'Non-alcoholic attr. mort. rate', color = grey]
+      tab3 [label = 'Sample either \n  alcoholic or non-alcoholic \n  rate based on \n % mort. alcohol-attr.', shape = diamond]
+      tab4 [label = 'Monte Carlo \n simulation on the \n selected mort. rate', shape = diamond]
+      tab5 [label = 'Alcoholic attr. mort.', color = pink]
+      
+      # edge definitions with the node IDs
+      tab1 -> tab3;
+      tab2 -> tab3;
+      tab3 -> tab4;
+      tab4 -> tab5
+      }
+      ")
+
+```
+
+This make not be correct, since it is possible that a person die from both alcoholic and non-alcoholic causes. Also not sure they alcoholic and non-alcoholic attributable rates are exclusive of each other.
+
+# Better method
+
+```{r flowchart_v2}
+
+library(DiagrammeR)
+grViz("digraph flowchart {
+      # node definitions with substituted label text
+      graph [layout = dot, rankdir = LR]
+      node [fontname = Helvetica, shape = rectangle, style=filled]        
+      tab1 [label = 'Alcoholic att. mort. rate', color = orange]
+      tab2 [label = 'Non-alcoholic att. mort. rate', color = grey]
+      tab3 [label = 'Monte Carlo \n simulation', shape = diamond, color = orange]
+      tab4 [label = 'Monte Carlo \n simulation', shape = diamond, color = grey]
+      tab5 [label = 'Combine Mone Carlo\n results (summation)', shape = diamond]
+      tab6 [label = 'Alcoholic att. mort.', color = pink]
+      
+      # edge definitions with the node IDs
+      tab1 -> tab3;
+      tab2 -> tab4;
+      tab3 -> tab5;
+      tab4 -> tab5;
+      tab5 -> tab6
+      }
+
+      ")
+
+```
+
+This maybe a better solution. However, if alcoholic and non-alcoholic attributable rates are NOT exclusive of each other, then the mortality maybe inflated.
+
+<!-- Run 3 state model -->
+
+```{r run_sim_3state, eval=FALSE}
+
+# Load microsimulation functions
+source('sim_functions_3state.R')
+
+# Run microsimulation
+comp.time <- list()
+
+for (i in seq(cchsDataList)[-9:11]) {
+
+  # Data subset
+  cchsData <- cchsDataList[[i]]
+  transProbSub <- transProb[i,]
+  
+  # Model input
+  n.i   <- sum(round(cchsData$WTS_S))   # number of simulated individuals, since it is weighted sum it needs to be rounded to join back to CCHS data
+  n.t   <- 30                    # time horizon, 30 cycles
+  v.n   <- c("H","S","D")        # the model states: Healthy (H), Sick (S), Dead (D)
+  n.s   <- length(v.n)           # the number of health states
+  v.M_1 <- rep("H", n.i)         # everyone begins in the healthy state 
+  d.e <- 0.03                    # equal discounting of costs and QALYs by 3%
+  samplev.m <- 1                 # argument use for samplev() function 
+  
+  # Transition probabilities (per cycle)
+  p.HD   <- transProbSub$transition_3_rate_100k/100000      # probability to die when healthy
+  p.HS   <- transProbSub$transition_1_rate_100k/100000      # probability to become sick when healthy
+  p.SH   <- transProbSub$transition_2_rate_100k/100000      # probability to become healthy when sick
+  #rr.S   <- transProbMat[i,'rr.S'] %>% unlist             	# rate ratio of death when sick vs healthy
+  #r.HD   <- -log(1 - p.HD) 	     # rate of death when healthy 
+  #r.SD   <- rr.S * r.HD  	       # rate of death when sick
+  #p.SD   <- 1 - exp(- r.SD)       # probability to die when sick
+  p.SD  <- transProbSub$transition_4_rate_100k/100000
+  rp.S  <- 0.2                     # increase of the mortality rate with every additional year being sick
+  
+  # QALY inputs
+  u.H     <- 1              # utility when healthy 
+  u.S     <- 0.75           # utility of sick individuals with every additional year being sick
+  ru.S    <- 0.03           # decrease in utility of sick individuals with every additional year being sick/sicker
+  v.x     <- runif(n.i, 0.95, 1.05) # vector capturing individuals' effect modifier at baseline
+  
+  # START SIMULATION
+  cat('\n# Stratum', paste(transProbSub[c('age','sex')], collapse=':'),', n =',n.i, '\n')      # display the stratum
+  
+  p = Sys.time()
+  sim <- MicroSim(v.M_1, n.i, n.t, v.n, samplev.m, X = v.x, d.e, seed = 100)  # run for treatment
+  comp.time[[i]] = Sys.time() - p
+  
+  comp.time[[i]]
+  
+  # SAVE SIMULATION RESULTS TO FILE
+  file_path <- file.path(dataDir,paste0('sim_',i,'.rds'))
+  saveRDS(sim, file_path)
+  
+  rm(sim)
+}
+
+
+```
+
+# Run two-state model
+
+```{r run_sim_2state, echo=TRUE, eval=FALSE}
+
+# Load microsimulation functions
+source('sim_functions_2state.R')
+
+# Set memory limit
+memory.limit(size=30000)
+
+# Run microsimulations
+comp.time <- list()
+
+for (i in seq(cchsDataList)[1:8]) {
+
+  # Data subset
+  cchsData <- cchsDataList[[i]]
+  transProbSub <- transProb[i,]
+  
+  # Model input (convert this into a function, incorporate bootstrap weights as input and do some testing!)
+  n.i   <- sum(round(cchsData$WTS_S))   # number of simulated individuals, since it is weighted sum it needs to be rounded to join back to CCHS data
+  n.t   <- 30                    # time horizon, 30 cycles
+  v.n   <- c("H","D")            # the model states: Healthy (H), Dead (D)
+  n.s   <- length(v.n)           # the number of health states
+  v.M_1 <- rep("H", n.i)         # everyone begins in the healthy state 
+  d.e <- 0.03                    # equal discounting of costs and QALYs by 3%
+  samplev.m <- 1                 # argument use for samplev() function 
+  
+  # Transition probabilities (per cycle)
+  p.HD1   <- transProbSub$transition_4_rate_100k/100000      # probability to die when healthy (alcoholic attributable)
+  p.HD2   <- transProbSub$transition_3_rate_100k/100000      # probability to die when healthy (non-alcoholic attributable)
+  p.AA    <- transProbSub$percent_alcohol_attributable       # % mortalities alcohol-attributable
+  
+  # QALY inputs
+  u.H     <- 1              # utility when healthy 
+  v.x     <- runif(n.i, 0.95, 1.05) # vector capturing individuals' effect modifier at baseline
+  
+  # START SIMULATION
+  cat('\n# Stratum', paste(transProbSub[c('age','sex')], collapse=':'),', n =',n.i, '\n')      # display the stratum
+  
+  p = Sys.time()
+  sim <- MicroSimV2(v.M_1, n.i, n.t, v.n, samplev.m, X = v.x, d.e, seed = 100)  # run for treatment
+  comp.time[[i]] = Sys.time() - p
+  
+  print(comp.time[[i]])
+  
+  # SAVE SIMULATION RESULTS TO FILE
+  file_path <- file.path(dataDir,paste0('sim_',i,'_2state_v2.rds'))
+  saveRDS(sim, file_path)
+  
+  rm(sim)
+}
+
+
+```
+
+# Results from two-state model for males ages 16-24
+
+```{r results_2state, cache=TRUE}
+
+## Load results
+i <- 3 # select stratum
+age <- transProb[i,'age']
+sex <- transProb[i,'sex']
+
+wideToLong <- function(mat) {
+  mat.dt <- as.data.table(mat)
+  mat.dt$ind <- as.numeric(gsub("ind ","",row.names(mat.dt)))
+  mat.dt.melt <- reshape2::melt(mat.dt, id.vars = "ind", variable.name = "cycle")
+  mat.dt.melt$cycle <- as.numeric(gsub("cycle.","",mat.dt.melt$cycle))  
+  return(mat.dt.melt)
+}
+
+longtablespath <- file.path(dataDir,paste0('sim_',i,'_2state_v2_longtables.rds'))
+m.M12dtype.dt.melt.file <- file.path(dataDir, paste0('m.M12dtype.dt.melt_',i,'.rds'))
+
+if (!file.exists(longtablespath)) {
+  
+  filefullpath <- file.path(dataDir,paste0('sim_',i,'_2state_v2.rds'))
+  sim <- readRDS(filefullpath)
+  
+  # Output matrices
+  library(data.table)
+
+  # m.M <- sim$m.M
+  # m.M1 <- sim$m.M1
+  # m.M2 <- sim$m.M2
+  # m.E <- sim$m.E
+  # m.un1 <- sim$m.un1
+  # m.un2 <- sim$m.un2
+  # arr.p1 <- sim$arr.p1
+  # arr.p2 <- sim$arr.p2
+  # m.dtype <- sim$m.dtype
+  #   
+  n.i <- nrow(sim$m.M)
+  
+  m.M.dt.melt <- wideToLong(sim$m.M)
+  m.M.dt.melt$state <- factor(m.M.dt.melt$value, levels=c("H","S","D"))
+  
+  m.M1.dt.melt <- wideToLong(sim$m.M1)
+  m.M1.dt.melt$state <- factor(m.M1.dt.melt$value, levels=c("H","S","D"))
+  
+  m.M2.dt.melt <- wideToLong(sim$m.M2)
+  m.M2.dt.melt$state <- factor(m.M2.dt.melt$value, levels=c("H","S","D"))
+  
+  m.dtype.dt.melt <- wideToLong(sim$m.dtype)
+
+  m.un1.dt.melt <- wideToLong(sim$m.un1)
+  
+  m.un2.dt.melt <- wideToLong(sim$m.un2)
+
+  m.E.dt.melt <- wideToLong(sim$m.E)
+
+  longtables <- list(m.M.dt.melt = m.M.dt.melt, m.M1.dt.melt = m.M1.dt.melt, m.M2.dt.melt = m.M2.dt.melt, m.dtype.dt.melt = m.dtype.dt.melt,
+                     m.un1.dt.melt = m.un1.dt.melt, m.un2.dt.melt = m.un2.dt.melt, m.E.dt.melt = m.E.dt.melt)
+  
+  saveRDS(longtables, longtablespath)
+  
+  rm(longtables, m.un1.dt.melt, m.un2.dt.melt, m.E.dt.melt)
+    
+  # Merge m.M, m.M1, and m.M2
+  m.M12.dt.melt <- merge.data.table(m.M1.dt.melt, m.M2.dt.melt, by = c("ind","cycle"))
+  names(m.M12.dt.melt) <- gsub('\\.y','.nonalcoholic',
+                               gsub('\\.x','.alcoholic', names(m.M12.dt.melt)))
+  
+  m.M12dtype.dt.melt <- merge.data.table(
+    merge.data.table(m.M.dt.melt, m.M12.dt.melt, by = c("ind","cycle")),
+    m.dtype.dt.melt, by = c("ind","cycle"))
+  
+  names(m.M12dtype.dt.melt) <- gsub('\\.y','.attributable',
+                               gsub('\\.x','.combined', names(m.M12dtype.dt.melt)))
+  
+  saveRDS(m.M12dtype.dt.melt, m.M12dtype.dt.melt.file)
+  
+  rm(m.M.dt.melt, m.M1.dt.melt, m.M2.dt.melt, m.dtype.dt.melt, m.M12dtype.dt.melt)
+  
+  gc()
+  
+} else {
+  longtables  <- readRDS(longtablespath)
+  m.M12dtype.dt.melt <- readRDS(m.M12dtype.dt.melt.file)
+  
+  m.M.dt.melt = longtables$m.M.dt.melt
+  m.M1.dt.melt = longtables$m.M1.dt.melt
+  m.M2.dt.melt = longtables$m.M2.dt.melt
+  m.dtype.dt.melt = longtables$m.dtype.dt.melt
+  m.un1.dt.melt = longtables$m.un1.dt.melt
+  m.un2.dt.melt = longtables$m.un2.dt.melt
+  m.E.dt.melt = longtables$m.E.dt.melt
+  
+  gc()
+}
+
+longtablessubpath <- file.path(dataDir,paste0('sim_',i,'_2state_v2_longtables_sub.rds'))
+
+if (!file.exists(longtablessubpath)) {
+  
+  # Subset to selected individuals
+  ind.d <- m.M.dt.melt %>% filter(cycle == 30 & state == "D") %>% select(ind) %>% unlist
+  
+  set.seed(100)
+  #n.i <- length(unique(m.M.dt.melt$ind))
+  #select.ind <- sample(1:n.i, size = 100)
+  select.ind <- sample(ind.d, size = 100)
+  
+  m.M.dt.melt.sub <- m.M.dt.melt %>% filter(ind %in% select.ind )
+  m.M.dt.melt.sub$idx <- match(m.M.dt.melt.sub$ind, select.ind)
+  
+  m.M1.dt.melt.sub <- m.M1.dt.melt %>% filter(ind %in% select.ind ) 
+  m.M1.dt.melt.sub$idx <- match(m.M1.dt.melt.sub$ind, select.ind)
+  
+  m.M2.dt.melt.sub <- m.M2.dt.melt %>% filter(ind %in% select.ind)
+  m.M2.dt.melt.sub$idx <- match(m.M2.dt.melt.sub$ind, select.ind)
+  
+  m.dtype.dt.melt.sub <- m.dtype.dt.melt %>% filter(ind %in% select.ind)
+  m.dtype.dt.melt.sub$idx <- match(m.dtype.dt.melt.sub$ind, select.ind)
+  
+  m.un1.dt.melt.sub <- m.un1.dt.melt %>% filter(ind %in% select.ind)
+  m.un1.dt.melt.sub$idx <- match(m.un1.dt.melt.sub$ind, select.ind)
+  
+  m.un2.dt.melt.sub <- m.un2.dt.melt %>% filter(ind %in% select.ind)
+  m.un2.dt.melt.sub$idx <- match(m.un2.dt.melt.sub$ind, select.ind)
+  
+  m.E.dt.melt.sub <- m.E.dt.melt %>% filter(ind %in% select.ind)
+  m.E.dt.melt.sub$idx <- match(m.E.dt.melt.sub$ind, select.ind)
+  
+  longtablessub <- list(m.M.dt.melt.sub = m.M.dt.melt.sub, m.M1.dt.melt.sub = m.M1.dt.melt.sub, 
+                        m.M2.dt.melt = m.M2.dt.melt.sub, m.dtype.dt.melt.sub = m.dtype.dt.melt.sub,
+                     m.un1.dt.melt.sub = m.un1.dt.melt.sub, m.un2.dt.melt.sub = m.un2.dt.melt.sub,
+                     m.E.dt.melt.sub = m.E.dt.melt.sub)
+  
+  saveRDS(longtablessub, longtablessubpath)
+  
+  gc()
+} else {
+  longtablessub  <- readRDS(longtablessubpath)
+  
+  m.M.dt.melt.sub = longtablessub$m.M.dt.melt.sub
+  m.M1.dt.melt.sub = longtablessub$m.M1.dt.melt.sub
+  m.M2.dt.melt.sub = longtablessub$m.M2.dt.melt.sub
+  m.dtype.dt.melt.sub = longtablessub$m.dtype.dt.melt.sub
+  m.un1.dt.melt.sub = longtablessub$m.un1.dt.melt.sub
+  m.un2.dt.melt.sub = longtablessub$m.un2.dt.melt.sub
+  m.E.dt.melt.sub = longtablessub$m.E.dt.melt.sub
+  
+  gc()
+}
+
+```
+
+Heat maps showing health state of selected individuals (n=100), the randomly generated uniform numbers to determine transition to death or not, and the quality-adjusted life years (healthy = 1, death = 0).
+
+```{r results_2state_heatmap, fig.width=6, fig.height=6}
+
+# Plot heat maps
+library(ggplot2)
+ggplot(m.M.dt.melt.sub, aes(cycle, idx)) + 
+  geom_tile(aes(fill = state), colour = "white")  +   
+  scale_fill_manual(values= c("darkgreen","purple","red")) +
+  labs(title = paste0('Age = ', age, ', sex = ',sex), 
+       x = "cycle", y = "ind") +
+  theme(text = element_text(size = 20)) 
+
+ggplot(m.un1.dt.melt.sub, aes(cycle, idx)) +
+  geom_tile(aes(fill = value)) +
+    scale_fill_gradient2(low = "navy", mid = "white", high = "red",
+                       midpoint = 0.5, na.value = "grey50", guide = "colourbar", aesthetics = "fill") +
+  labs(fill = 'Randomly sampled uniform\nnumber for "alcoholic" portion\n(extremely high value would\ntransition to death)')
+
+ggplot(m.un2.dt.melt.sub, aes(cycle, idx)) +
+  geom_tile(aes(fill = value)) +
+    scale_fill_gradient2(low = "navy", mid = "white", high = "red",
+                       midpoint = 0.5, na.value = "grey50", guide = "colourbar", aesthetics = "fill") +
+  labs(fill = 'Randomly sampled uniform\nnumber for "non-alcoholic" portion\n(extremely high value would\ntransition to death)')
+
+ggplot(m.E.dt.melt.sub, aes(cycle, idx)) + 
+  geom_tile(aes(fill = value)) + 
+  labs(fill = 'Quality-adjusted life years')
+
+```
+
+Table showing the attributable cause of death among the selected individuals who died:
+
+```{r results_2state_attributable, cache=TRUE}
+
+# Merge m.M, m.M1, and m.M2
+m.M12.dt.melt <- merge.data.table(m.M1.dt.melt, m.M2.dt.melt, by = c("ind","cycle"))
+names(m.M12.dt.melt) <- gsub('\\.y','.nonalcoholic',
+                             gsub('\\.x','.alcoholic', names(m.M12.dt.melt)))
+
+m.M12dtype.dt.melt <- merge.data.table(
+  merge.data.table(m.M.dt.melt, m.M12.dt.melt, by = c("ind","cycle")),
+  m.dtype.dt.melt, by = c("ind","cycle"))
+
+names(m.M12dtype.dt.melt) <- gsub('\\.y','.attributable',
+                             gsub('\\.x','.combined', names(m.M12dtype.dt.melt)))
+  
+if (FALSE) {
+  # check number of death by cause
+  m.M12dtype.dt.melt[c("ind","cycle","value.alcoholic","value.nonalcoholic","value.attributable","value.combined")] %>%
+  filter((value.alcoholic == "H" & value.nonalcoholic == "D") | (value.alcoholic == "D" & value.nonalcoholic == "H") | (value.alcoholic == "D" & value.nonalcoholic == "D")) %>%
+  arrange(ind, cycle) %>%
+  group_by(ind) %>%
+  mutate(index = row_number()) %>%
+  filter(index == 1) %>%
+  mutate(cause = ifelse(value.alcoholic == "H" & value.nonalcoholic == "D", "Non-alcoholic",
+                        ifelse(value.alcoholic == "D" & value.nonalcoholic == "H", "Alcoholic",
+                               ifelse(value.alcoholic == "D" & value.nonalcoholic == "D", "Both", NA)))) %>%
+  group_by(cause) %>%
+  summarise(count = n())
+  
+  
+  m.M12dtype.dt.melt %>% 
+    filter((value.alcoholic == "H" & nonalcoholic == "D") | (value.alcoholic == "D" & value.nonalcoholic == "H")) # %>% # 13978
+    #filter(cycle == 30) # 484
+  
+  m.M12dtype.dt.melt %>% 
+    filter(value.alcoholic == "D" & value.nonalcoholic == "D") %>%
+    group_by(ind) %>%
+    mutate(row_index = row_number()) %>%
+    filter(row_index == 1)
+  
+  sim$arr.p1[56,,6]
+  sim$arr.p2[56,,6]
+  
+  sim$m.un1[56,6]
+  sim$m.un2[56,6]
+  
+  sim$m.M1[56,]
+  sim$m.M2[56,]
+}
+
+# Table for attributable cause of death
+m.M12dtype.dt.melt[c("ind","cycle","value.alcoholic","value.nonalcoholic","value.attributable","value.combined")] %>%
+  filter(ind %in% select.ind) %>%
+  filter((value.alcoholic == "H" & value.nonalcoholic == "D") | (value.alcoholic == "D" & value.nonalcoholic == "H")) %>%
+  kable(caption = "Attributable cause of death among the selected individuals who died",
+        col.names = c("ind","cycle","Alcoholic path","Non-alcoholic path","Cause of death","Combined status"), row.names = FALSE) %>%
+  kable_styling("striped")
+
+if (FALSE) {
+  select.death <- c(684132,774366)
+}
+  
+
+```
+
+Summary statistics of number of alcoholic/non-alcoholic deaths overall and by cycle for males ages 15-24:
+
+```{r results_2state_summary, cache=TRUE}
+
+# By individual
+num_alc <- sum(apply(m.dtype == "Alcoholic", 1, any, na.rm=TRUE))
+num_nonalc <- sum(apply(m.dtype == "Non-alcoholic", 1, any, na.rm=TRUE))
+num_combined <- sum(apply(m.dtype, 1, 
+          function(x) {
+            any(x %in% c("Alcoholic","Non-alcoholic"), na.rm=TRUE)}))
+percent_alc <- paste0(round(num_alc*100/n.i,1), '%')
+percent_nonalc <- paste0(round(num_nonalc*100/n.i,1), '%')
+percent_combined <- paste0(round(num_combined*100/n.i,1), '%')
+
+summary <- data.frame(n.i = n.i, num_alc, num_nonalc, num_combined, 
+                      percent_alc, percent_nonalc, percent_combined)
+
+kable(summary, caption = "Number of alcoholic/non-alcoholic deaths overall", 
+      col.names=c("Number of individual","Number of alcoholic deaths","Number of non-alcoholic deaths",
+                           "Number of deaths combined", "Percent of alcoholic deaths", "Percent of non-alcoholic deaths", 
+                           "Percent of deaths combined"),
+      row.names = FALSE) %>%
+  kable_styling("striped")
+
+# By cycle
+num_alc_by_cycle <- apply(m.dtype == "Alcoholic", 2, sum, na.rm=TRUE)
+num_nonalc_by_cycle <- apply(m.dtype == "Non-alcoholic", 2, sum, na.rm=TRUE)
+num_combined_by_cycle <- apply(m.dtype, 2, 
+          function(x) {
+            sum(x %in% c("Alcoholic","Non-alcoholic"), na.rm=TRUE)})
+
+percent_alc_by_cycle <- paste0(round(num_alc_by_cycle*100/n.i,1), '%')
+percent_nonalc_by_cycle <- paste0(round(num_nonalc_by_cycle*100/n.i,1), '%')
+percent_combined_by_cycle <- paste0(round(num_combined_by_cycle*100/n.i,1), '%')
+
+summary_by_cycle <- data.frame(num_alc_by_cycle, num_nonalc_by_cycle, num_combined_by_cycle, 
+                      percent_alc_by_cycle, percent_nonalc_by_cycle, percent_combined_by_cycle)
+
+kable(summary_by_cycle, caption = "Number of alcoholic/non-alcoholic deaths by cycle", 
+      col.names=c("Number of alcoholic deaths","Number of non-alcoholic deaths",
+                           "Number of deaths combined", "Percent of alcoholic deaths", "Percent of non-alcoholic deaths", 
+                           "Percent of deaths combined"),
+      row.names = FALSE) %>%
+  kable_styling("striped")
+
+```
+
+```{r ind_results_2state_v1, eval=FALSE}
+
+## Individual level results
+# Select data from the first stratum
+cchsData <- cchsDataList[[i]]
+
+# Survey weights for expanding CCHS data
+cchs_wgts <- round(cchsData$WTS_S)
+cchs_nrow <- length(cchs_wgts)
+expand_wgts_list <- sapply(1:cchs_nrow, function (i) {
+  rep(i, times=cchs_wgts[i])
+})
+expand_wgts <- unlist(expand_wgts_list)
+
+# Expand data according to survey weights
+cchs_sub_weighted <- cchsData[expand_wgts,
+                         c('agecat','sex','educat','incpercat','inchhcat',
+                           'ethncat','maritalcat','geourcat')]
+
+# Calculate number of healthy and sick health states
+num_hlth_sick_states <- apply(m.M, 1, 
+      function(i) {
+        table(i)[c("H","S")]
+      }) 
+num_hlth_sick_states <- data.frame(num_hlth_sick_states)
+cchs_sub_weighted[c("num_hlth_state","num_sick_state")] <- t(num_hlth_sick_states)
+
+# Time of death and Assign health state at the end of cycles
+death_time_cycles_end_list <- apply(m.M, 1, 
+                               function(i) {
+                                 
+                                 d_times <- grep("D",i)
+                                 
+                                 if (length(d_times) != 0) {
+                                   
+                                   min_pos <- min(grep("D",i))
+                                   time_of_death <- min_pos 
+                                 } else {
+                                   time_of_death <- NA 
+                                 }
+                                 
+                                 end_of_cycles <- tail(i, 1)
+                                 
+                                 return(
+                                   list(time_of_death = time_of_death, end_of_cycles=end_of_cycles))
+                               }) 
+death_time_cycles_end <- do.call(rbind, death_time_cycles_end_list)
+death_time_cycles_end <- data.frame(death_time_cycles_end)
+cchs_sub_weighted[c('time_of_death','end_of_cycles')] <- death_time_cycles_end
+
+# QALYs per individual
+cchs_sub_weighted$qalys <- rowSums(m.E) 
+
+# Show the results
+DT::datatable(cchs_sub_weighted[select.ind,], 
+              colnames=c("Age group","Sex","Education","Income (personal)","Income (household)",
+                         "Ethnicity","Marital Status","Urban/Rural", 
+                         "Number of healthy state","Number of sick state",
+                         'Time of death','End of cycles',
+                         "QALYs"))
+
+```
+
+
+# Percent of deaths over time, for all age- and sex-groups
+
+```{r results_overtime, cache=TRUE}
+
+## Load results
+m.dtype.cycle.wide.list <- list()
+m.dtot.cycle.list <- list()
+n.i.list <- list()
+
+dtype <- c("Alcoholic","Non-alcoholic","Both")
+dtype.df <- data.frame(x = dtype)
+
+for (i in 1:8) {
+  
+  filefullpath <- file.path(dataDir,paste0('sim_',i,'_2state_v2.rds'))
+  sim <- readRDS(filefullpath)
+  
+  m.dtype <- sim$m.dtype
+  n.i <- nrow(m.dtype)
+  
+  m.dtype.cycle.list <- apply(m.dtype, 2, function(x) {
+    
+    dtype.tab <- table(x)
+    
+    if (length(dtype.tab) != 0){
+      df <- data.frame(dtype.tab)
+      dtype.df.mg <- merge(dtype.df, df, by='x', all.x=TRUE)
+      dtype.df.mg$Freq <- with(dtype.df.mg, ifelse(is.na(Freq), 0, Freq))
+    } else {
+      dtype.df.mg <- dtype.df
+      dtype.df.mg$Freq <- 0
+    }
+    
+    return(dtype.df.mg)
+  })
+  
+  for (x in seq(m.dtype.cycle.list)) {
+    m.dtype.cycle.list[[x]]$cycle <- x
+  }
+  
+  m.dtype.cycle <- do.call(rbind, m.dtype.cycle.list)
+  m.dtype.cycle.wide <- reshape(m.dtype.cycle, idvar = "cycle", timevar = "x", 
+                                direction = "wide")
+  
+  m.dtype.cycle.wide$Percent.Alcoholic <- m.dtype.cycle.wide$Freq.Alcoholic*100 / n.i
+  m.dtype.cycle.wide$"Percent.Non-alcoholic" <- m.dtype.cycle.wide$"Freq.Non-alcoholic"*100 / n.i
+  m.dtype.cycle.wide$Percent.Both <- m.dtype.cycle.wide$Freq.Both*100 / n.i
+  
+  m.dtot.cycle <- m.dtype.cycle %>% 
+    group_by(cycle) %>%
+    summarise(Freq = sum(Freq)) %>%
+    mutate(Percent = Freq*100/n.i)
+  
+  plot(m.dtot.cycle$cycle, m.dtot.cycle$Percent, type='l', yaxt='n',
+       xlab = 'Cycle', ylab = 'Percent of deaths (%)')
+  axis(2, las = 2)
+  
+  n.i.list[[i]] <- n.i
+  m.dtype.cycle.wide.list[[i]] <- m.dtype.cycle.wide
+  m.dtot.cycle.list[[i]] <- m.dtot.cycle
+  
+  rm(sim, m.dtype)
+}
+
+```
+
+```{r results_overtime_allcause}
+
+## Plots
+# All-cause
+transProb$lty <- as.numeric(as.factor(transProb$sex))
+transProb$col <- with(transProb, 
+                      ifelse(age == '16-24', 'red',
+                             ifelse(age == '25-34', 'orange',
+                                    ifelse(age == '35-54', 'green',
+                                           ifelse(age == '55+', 'blue', NA)))))
+
+
+par(mar=c(4,4,1,4), mgp=c(1.8,0.8,0), cex=0.9)
+
+plot(0, 0, type = 'n', xlim=c(1,31), ylim = c(0,7), yaxt='n',
+     xlab = 'Cycle', ylab = "Percent of deaths ages 16-54 (%)", )
+axis(2, las=2)
+
+for (i in 1:6) {
+  lty <- transProb[i,'lty'] %>% unlist
+  col <- transProb[i,'col'] %>% unlist
+  
+  lines(m.dtot.cycle.list[[i]]$cycle, m.dtot.cycle.list[[i]]$Percent, 
+       lty = lty, lwd = 2, col = col)
+}
+
+par(new = TRUE)
+i = 7
+lty <- transProb[i,'lty'] %>% unlist
+col <- transProb[i,'col'] %>% unlist
+plot(m.dtot.cycle.list[[i]]$cycle, m.dtot.cycle.list[[i]]$Percent, 
+     type = "l", axes = FALSE, yaxt='n', bty = "n", xlab = "", ylab = "",
+     ylim = c(0,60), lty = lty, lwd = 2, col = col)
+axis(side = 4, at = pretty(range(m.dtot.cycle.list[[i]]$Percent)), las=2)
+mtext("Percent of deaths ages 55+ (%)", side=4, line=2, cex=0.9)
+i = 8
+lty <- transProb[i,'lty'] %>% unlist
+col <- transProb[i,'col'] %>% unlist
+lines(m.dtot.cycle.list[[i]]$cycle, m.dtot.cycle.list[[i]]$Percent,
+      lty = lty, lwd = 2, col = col)
+
+legend('topleft', legend = c('Ages 16-24 (left-axis)','Ages 25-34 (left-axis)', 'Ages 35-54 (left-axis)',
+                             'Ages 55+ (right-axis)','Male','Female'),
+       col = c('red','orange','green','blue',grey(0.4),grey(0.4)),
+       lty = c(1,1,1,1,3,2), lwd = 2)
+
+
+```
+
+```{r results_overtime_cause_specific_plot1, fig.width = 12, fig.height= 16}
+
+# Cause-specific
+par(mfrow=c(4,2), mar=c(4,5,1.5,4), mgp=c(2.5,0.8,0), cex=1.0)
+
+for (i in 1:8) {
+  age <- transProb[i,'age'] %>% unlist
+  sex <- transProb[i,'sex'] %>% unlist
+  
+  m.dtype.cycle.wide <- m.dtype.cycle.wide.list[[i]]
+  plot(m.dtype.cycle.wide$cycle, m.dtype.cycle.wide$Percent.Alcoholic,
+       yaxt='n', ylim=c(0,1.4), pch=16, col='red',
+       main = paste0(sex,', ages ',age,' (n = ',n.i.list[[i]],')'),
+         xlab='Cycle', ylab="Percent of alcoholic deaths (%)") 
+  axis(2, las=2)
+  
+  if (i %in% 1:6) {
+    ylim = c(0,6)
+  } else {
+    ylim = c(0,60)
+  }
+  
+  par(new = TRUE)
+  plot(m.dtype.cycle.wide$cycle, m.dtype.cycle.wide$"Percent.Non-alcoholic", 
+     type = "l", lwd = 2, axes = FALSE, yaxt='n', bty = "n", ylim = c(ylim[1],ylim[2]),
+     xlab = "", ylab = "",
+     lty = 2, col = 'black')
+  if (i %in% 1:6) {
+    axis(side = 4, at = 0:5, las=2)
+  } else {
+    axis(side = 4, at = seq(0,60,by=10), las=2)
+  }
+  mtext("Percent of non-alcoholic deaths (%)", side=4, line=1.8, cex=1.0)
+  
+  legend('topleft', legend=c('Alcoholic (left-axis)','Non-alcoholic (right-axis)'), pch = c(16,NA), lty = c(NA, 2), col=c('red','black'))
+}
+
+ 
+```
+
+
+```{r results_overtime_cause_specific_plot2, fig.width = 12, fig.height= 8}
+
+## Plots
+# Alcohol
+transProb$lty <- as.numeric(as.factor(transProb$sex))
+transProb$col <- with(transProb, 
+                      ifelse(age == '16-24', 'red',
+                             ifelse(age == '25-34', 'orange',
+                                    ifelse(age == '35-54', 'green',
+                                           ifelse(age == '55+', 'blue', NA)))))
+
+
+par(mfrow = c(2,2), mar=c(4,4,1,0.5), mgp=c(2.5,0.8,0), cex=0.9)
+
+# Alcoholic deaths ages 16-54
+plot(0, 0, type = 'n', bty='n', 
+     xlim=c(1,31), ylim = c(0,1.5), yaxt='n',
+     main = 'Alcoholic deaths ages 16-54',
+     xlab = 'Cycle', ylab = "Percent of alcoholic deaths (%)", )
+axis(2, las=2)
+
+for (i in 1:6) {
+  lty <- transProb[i,'lty'] %>% unlist
+  col <- transProb[i,'col'] %>% unlist
+  
+  m.dtype.cycle.wide <- m.dtype.cycle.wide.list[[i]]
+  
+  lines(m.dtype.cycle.wide$cycle, m.dtype.cycle.wide$Percent.Alcoholic,
+  lwd = 2, lty = lty, col=col) 
+}
+  
+legend('topleft', legend = c('Ages 16-24','Ages 25-34', 'Ages 35-54',
+                             'Ages 55+','Male','Female'),
+       col = c('red','orange','green','blue',grey(0.4),grey(0.4)),
+       lwd = 2, lty = c(1,1,1,1,3,2), inset = c(0,0.05))
+
+# Alcoholic deaths ages 55+
+plot(0, 0, type = 'n', bty='n', 
+     xlim=c(1,31), ylim = c(0,1.5), yaxt='n',
+     main = 'Alcoholic deaths ages 55+',
+     xlab = 'Cycle', ylab = "Percent of alcoholic deaths (%)")
+axis(2, las=2)
+
+for (i in 7:8) {
+  lty <- transProb[i,'lty'] %>% unlist
+  col <- transProb[i,'col'] %>% unlist
+  
+  m.dtype.cycle.wide <- m.dtype.cycle.wide.list[[i]]
+  
+  lines(m.dtype.cycle.wide$cycle, m.dtype.cycle.wide$Percent.Alcoholic,
+  lwd = 2, lty = lty, col=col) 
+}
+  
+
+# Non-alcoholic deaths ages 16-54
+plot(0, 0, type = 'n', bty='n', 
+     xlim=c(1,31), ylim = c(0,5), yaxt='n',
+     main = 'Non-alcoholic deaths ages 16-54',
+     xlab = 'Cycle', ylab = "Percent of non-alcoholic deaths (%)")
+axis(2, las=2)
+
+for (i in 1:6) {
+  lty <- transProb[i,'lty'] %>% unlist
+  col <- transProb[i,'col'] %>% unlist
+  
+  m.dtype.cycle.wide <- m.dtype.cycle.wide.list[[i]]
+  
+  lines(m.dtype.cycle.wide$cycle, m.dtype.cycle.wide$'Percent.Non-alcoholic',
+  lwd = 2, lty = lty, col=col) 
+}
+
+#  Non-alcoholic deaths ages 55+
+plot(0, 0, type = 'n', bty='n', 
+     xlim=c(1,31), ylim = c(0,60), yaxt='n',
+     main = 'Non-alcoholic deaths ages 55+',
+     xlab = 'Cycle', ylab = "Percent of non-alcoholic deaths (%)")
+axis(2, las=2)
+
+for (i in 7:8) {
+  lty <- transProb[i,'lty'] %>% unlist
+  col <- transProb[i,'col'] %>% unlist
+  
+  m.dtype.cycle.wide <- m.dtype.cycle.wide.list[[i]]
+  
+  lines(m.dtype.cycle.wide$cycle, m.dtype.cycle.wide$'Percent.Non-alcoholic',
+  lwd = 2, lty = lty, col=col) 
+}
+  
+
+```
+
+
